@@ -1,0 +1,25 @@
+# Live Frigate configuration and secrets
+config.yaml
+config/
+*.pem
+*.key
+*.secret
+.env
+
+# Frigate databases and runtime files
+*.db
+*.db-*
+*.db-shm
+*.db-wal
+*.lock
+.runtime_state.json
+.search_stats.json
+.exports
+.timeline
+.vacuum
+
+# Media
+media/
+recordings/
+clips/
+exports/

@@ -1,0 +1,11 @@
+# Do not place real camera URLs, passwords, API keys, or JWT secrets in Git.
+#
+# The active configuration for this deployment is:
+#   /DATA/AppData/frigate/config/config.yaml
+#
+# Use this file only as a sanitized example when configuration is shared.
+
+mqtt:
+  enabled: false
+
+cameras: {}
