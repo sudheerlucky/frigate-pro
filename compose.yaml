@@ -1,0 +1,29 @@
+services:
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:11f8786
+    privileged: true
+    restart: always
+    shm_size: 1GB
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    environment:
+      - TZ=Asia/Kolkata
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/dri/renderD128:/dev/dri/renderD128
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - /DATA/AppData/frigate/config:/config
+      - /DATA/AppData/frigate:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1GB
+    ports:
+      - 5050:5000
+      - 8554:8554
+      - 1984:1984
+      - 8971:8971
+networks: {}
