@@ -23,4 +23,12 @@ Git-managed deployment files for the Frigate NVR running on the media server.
 
 Update the `image` tag in `compose.yaml`, then run `docker compose pull && docker compose up -d`.
 
+## Credentials
+
+Copy .env.example to .env on the server and add rotated MQTT and camera credentials there. Keep .env untracked. Update the live Frigate config to reference only FRIGATE_ environment variables before recreating the service.
+
+## Face-pipeline verification
+
+Run deployment/scripts/verify-face-pipeline.sh after a restart. It checks container health, looks for the known camera decode failure, and confirms Intel Quick Sync decoding is active.
+
 Frigate stays containerized because its supported runtime includes FFmpeg, go2rtc, a process supervisor, shared memory, and direct GPU access.
