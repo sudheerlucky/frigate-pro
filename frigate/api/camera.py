@@ -456,6 +456,97 @@ def ffprobe_snapshot(request: Request, url: str = "", timeout: int = 10):
         )
 
 
+@router.get(
+    "/{camera_name}/tapo/night_vision",
+    dependencies=[Depends(require_role(["admin"]))],
+)
+def get_tapo_night_vision(request: Request, camera_name: str):
+    """Get the current day/night (IR) mode for a Tapo camera, via its local
+    (no-cloud) control API. Requires tapo.enabled and credentials set in
+    this camera's config."""
+    camera_config = request.app.frigate_config.cameras.get(camera_name)
+
+    if camera_config is None:
+        return JSONResponse(
+            content={"success": False, "message": f"Camera {camera_name} not found"},
+            status_code=404,
+        )
+
+    tapo_config = camera_config.tapo
+
+    if not tapo_config.enabled or not tapo_config.host or not tapo_config.username:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Tapo control is not configured for this camera.",
+            },
+            status_code=400,
+        )
+
+    from frigate.util.tapo import get_night_vision_mode
+
+    try:
+        mode = get_night_vision_mode(tapo_config)
+    except Exception as e:
+        return JSONResponse(
+            content={"success": False, "message": f"Could not reach camera: {e}"},
+            status_code=502,
+        )
+
+    return JSONResponse(content={"success": True, "mode": mode}, status_code=200)
+
+
+@router.put(
+    "/{camera_name}/tapo/night_vision",
+    dependencies=[Depends(require_role(["admin"]))],
+)
+def set_tapo_night_vision(request: Request, camera_name: str, mode: str = ""):
+    """Set the day/night (IR) mode for a Tapo camera locally. mode must be
+    one of 'off' (never IR), 'on' (always IR), 'auto' (sensor-based)."""
+    camera_config = request.app.frigate_config.cameras.get(camera_name)
+
+    if camera_config is None:
+        return JSONResponse(
+            content={"success": False, "message": f"Camera {camera_name} not found"},
+            status_code=404,
+        )
+
+    tapo_config = camera_config.tapo
+
+    if not tapo_config.enabled or not tapo_config.host or not tapo_config.username:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Tapo control is not configured for this camera.",
+            },
+            status_code=400,
+        )
+
+    from frigate.util.tapo import VALID_DAY_NIGHT_MODES, set_night_vision_mode
+
+    if mode not in VALID_DAY_NIGHT_MODES:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": f"mode must be one of {VALID_DAY_NIGHT_MODES}",
+            },
+            status_code=400,
+        )
+
+    try:
+        set_night_vision_mode(tapo_config, mode)
+    except Exception as e:
+        return JSONResponse(
+            content={"success": False, "message": f"Could not reach camera: {e}"},
+            status_code=502,
+        )
+
+    return JSONResponse(
+        content={"success": True, "message": f"Night vision mode set to {mode}."},
+        status_code=200,
+    )
+
+
 @router.get("/reolink/detect", dependencies=[Depends(require_role(["admin"]))])
 def reolink_detect(host: str = "", username: str = "", password: str = ""):
     """

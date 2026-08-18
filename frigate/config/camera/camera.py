@@ -33,6 +33,7 @@ from .mqtt import CameraMqttConfig
 from .notification import NotificationConfig
 from .objects import ObjectConfig
 from .onvif import OnvifConfig
+from .tapo import TapoConfig
 from .profile import CameraProfileConfig
 from .record import RecordConfig
 from .review import ReviewConfig
@@ -168,6 +169,11 @@ class CameraConfig(FrigateBaseModel):
         default_factory=OnvifConfig,
         title="ONVIF",
         description="ONVIF connection and PTZ autotracking settings for this camera.",
+    )
+    tapo: TapoConfig = Field(
+        default_factory=TapoConfig,
+        title="Tapo local control",
+        description="Local (no-cloud) control settings for a TP-Link Tapo camera, e.g. night vision mode.",
     )
     type: CameraTypeEnum = Field(
         default=CameraTypeEnum.generic,
