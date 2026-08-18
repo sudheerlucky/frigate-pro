@@ -9,6 +9,7 @@ __all__ = [
     "CameraLicensePlateRecognitionConfig",
     "CameraAudioTranscriptionConfig",
     "FaceRecognitionConfig",
+    "ImmichConfig",
     "SemanticSearchConfig",
     "CameraSemanticSearchConfig",
     "LicensePlateRecognitionConfig",
@@ -251,6 +252,45 @@ class CameraSemanticSearchConfig(FrigateBaseModel):
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
 
+class ImmichConfig(FrigateBaseModel):
+    enabled: bool = Field(
+        default=False,
+        title="Enable Immich integration",
+        description="Enable pulling reference face photos from a self-hosted Immich instance to build face recognition references.",
+    )
+    host: str | None = Field(
+        default=None,
+        title="Immich base URL",
+        description="Base URL of the Immich server, e.g. http://192.168.1.109:2283",
+    )
+    api_key: str | None = Field(
+        default=None,
+        title="Immich API key",
+        description="API key with read access to Immich's people and assets.",
+    )
+    max_images_per_person: int = Field(
+        default=30,
+        ge=1,
+        le=200,
+        title="Max reference images per person",
+        description="Maximum number of Immich photos to import per person when rebuilding face references.",
+    )
+    min_sharpness: float = Field(
+        default=80.0,
+        ge=0.0,
+        title="Minimum sharpness score",
+        description="Minimum Laplacian-variance sharpness a cropped face image must have to be imported; blurrier images are skipped.",
+    )
+    min_face_size: int = Field(
+        default=100,
+        ge=20,
+        title="Minimum face size (px)",
+        description="Minimum width/height in pixels of the cropped face region required to import an image.",
+    )
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+
 class FaceRecognitionConfig(FrigateBaseModel):
     enabled: bool = Field(
         default=False,
@@ -310,6 +350,11 @@ class FaceRecognitionConfig(FrigateBaseModel):
         default=None,
         title="Device",
         description="This is an override, to target a specific device. See https://onnxruntime.ai/docs/execution-providers/ for more information",
+    )
+    immich: ImmichConfig = Field(
+        default_factory=ImmichConfig,
+        title="Immich integration",
+        description="Settings for importing reference face photos from a self-hosted Immich instance.",
     )
 
 

@@ -267,6 +267,34 @@ export default function FaceLibrary() {
     [setPageToggle, refreshFaces, t],
   );
 
+  const onImportImmich = useCallback(
+    (name: string) => {
+      toast.info(t("toast.info.importingFromImmich", { name }), {
+        position: "top-center",
+      });
+      axios
+        .post(`/faces/${name}/import_immich`)
+        .then((resp) => {
+          if (resp.status === 200) {
+            toast.success(resp.data.message, {
+              position: "top-center",
+            });
+            refreshFaces();
+          }
+        })
+        .catch((error) => {
+          const errorMessage =
+            error.response?.data?.message ||
+            error.response?.data?.detail ||
+            "Unknown error";
+          toast.error(t("toast.error.importImmichFailed", { errorMessage }), {
+            position: "top-center",
+          });
+        });
+    },
+    [refreshFaces, t],
+  );
+
   const onReclassify = useCallback(
     (image: string, newName: string) => {
       axios
@@ -399,6 +427,7 @@ export default function FaceLibrary() {
           setPageToggle={setPageToggle}
           onDelete={onDelete}
           onRename={onRename}
+          onImportImmich={onImportImmich}
         />
         {selectedFaces?.length > 0 ? (
           <div className="flex items-center justify-center gap-2">
@@ -504,6 +533,7 @@ type LibrarySelectorProps = {
   setPageToggle: (toggle: string) => void;
   onDelete: (name: string, ids: string[], isName: boolean) => void;
   onRename: (old_name: string, new_name: string) => void;
+  onImportImmich: (name: string) => void;
 };
 function LibrarySelector({
   pageToggle,
@@ -513,6 +543,7 @@ function LibrarySelector({
   setPageToggle,
   onDelete,
   onRename,
+  onImportImmich,
 }: LibrarySelectorProps) {
   const { t } = useTranslation(["views/faceLibrary"]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -642,6 +673,24 @@ function LibrarySelector({
                 </span>
               </div>
               <div className="flex gap-0.5 px-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onImportImmich(face);
+                      }}
+                    >
+                      <LuRefreshCw className="size-4 text-primary" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipPortal>
+                    <TooltipContent>{t("button.importImmich")}</TooltipContent>
+                  </TooltipPortal>
+                </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

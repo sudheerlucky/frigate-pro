@@ -19,12 +19,22 @@ export interface BirdseyeConfig {
   width: number;
 }
 
+export interface ImmichConfig {
+  enabled: boolean;
+  host: string | null;
+  api_key: string | null;
+  max_images_per_person: number;
+  min_sharpness: number;
+  min_face_size: number;
+}
+
 export interface FaceRecognitionConfig {
   enabled: boolean;
   model_size: SearchModelSize;
   unknown_score: number;
   detection_threshold: number;
   recognition_threshold: number;
+  immich: ImmichConfig;
 }
 
 export type SearchModel = "jinav1" | "jinav2";

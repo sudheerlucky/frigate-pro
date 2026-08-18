@@ -41,6 +41,7 @@ const faceRecognition: SectionConfigOverrides = {
       "save_attempts",
       "blur_confidence_filter",
       "device",
+      "immich",
     ],
     advancedFields: [
       "unknown_score",
@@ -51,6 +52,7 @@ const faceRecognition: SectionConfigOverrides = {
       "save_attempts",
       "blur_confidence_filter",
       "device",
+      "immich",
     ],
     restartRequired: ["enabled", "model_size", "device"],
     fieldMessages: [
@@ -66,6 +68,24 @@ const faceRecognition: SectionConfigOverrides = {
     uiSchema: {
       model_size: {
         "ui:options": { size: "xs", enumI18nPrefix: "modelSize" },
+      },
+      immich: {
+        "ui:order": [
+          "enabled",
+          "host",
+          "api_key",
+          "max_images_per_person",
+          "min_sharpness",
+          "min_face_size",
+          "*",
+        ],
+      },
+      "immich.api_key": {
+        "ui:widget": "password",
+        "ui:options": { size: "lg" },
+      },
+      "immich.host": {
+        "ui:options": { size: "lg" },
       },
     },
   },

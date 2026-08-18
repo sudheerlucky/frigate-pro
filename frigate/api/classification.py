@@ -326,6 +326,83 @@ def register_face(request: Request, name: str, file: UploadFile):
 
 
 @router.post(
+    "/faces/{name}/import_immich",
+    response_model=GenericResponse,
+    dependencies=[Depends(require_role(["admin"]))],
+    summary="Import reference photos from Immich",
+    description="""Pulls photos of a matching person from a configured Immich instance,
+    crops each to that person's face (using Immich's own face detection to avoid
+    mismatches in multi-person photos), filters out blurry or too-small crops, and
+    registers the highest-quality results with Frigate's face recognizer.""",
+)
+def import_immich_faces(request: Request, name: str):
+    if not request.app.frigate_config.face_recognition.enabled:
+        return JSONResponse(
+            status_code=400,
+            content={"message": "Face recognition is not enabled.", "success": False},
+        )
+
+    if sanitize_path_component(name) is None:
+        return invalid_name_response(name)
+
+    immich_config = request.app.frigate_config.face_recognition.immich
+
+    if not immich_config.enabled or not immich_config.host or not immich_config.api_key:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "message": "Immich integration is not configured. Set host and api_key in Settings.",
+                "success": False,
+            },
+        )
+
+    from frigate.util.immich import fetch_candidate_faces, find_person_id
+
+    try:
+        person_id = find_person_id(immich_config, name)
+    except Exception as e:
+        return JSONResponse(
+            status_code=502,
+            content={"message": f"Could not reach Immich: {e}", "success": False},
+        )
+
+    if person_id is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "message": f"No unambiguous Immich person named '{name}' was found.",
+                "success": False,
+            },
+        )
+
+    try:
+        candidates = fetch_candidate_faces(immich_config, person_id)
+    except Exception as e:
+        return JSONResponse(
+            status_code=502,
+            content={"message": f"Immich import failed: {e}", "success": False},
+        )
+
+    context: EmbeddingsContext = request.app.embeddings
+    registered = 0
+
+    for candidate in candidates:
+        result = None if context is None else context.register_face(
+            name, candidate["image_bytes"]
+        )
+        if isinstance(result, dict) and result.get("success"):
+            registered += 1
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "message": f"Imported {registered}/{len(candidates)} quality-filtered photos from Immich.",
+        },
+    )
+
+
+@router.post(
     "/faces/recognize",
     response_model=FaceRecognitionResponse,
     summary="Recognize a face from an uploaded image",
