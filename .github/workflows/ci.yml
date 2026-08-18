@@ -116,8 +116,6 @@ jobs:
             *.cache-from=type=registry,ref=${{ steps.setup.outputs.cache-name }}-jp6
             *.cache-to=type=registry,ref=${{ steps.setup.outputs.cache-name }}-jp6,mode=max
   amd64_extra_builds:
-    # Not needed for this personal amd64-only fork. See note on arm64_build.
-    if: false
     runs-on: ubuntu-22.04
     name: AMD64 Extra Build
     needs:
