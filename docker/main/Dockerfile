@@ -94,7 +94,7 @@ RUN apt-get -qq update \
 RUN --mount=type=bind,source=docker/main/build_ov_model.py,target=/build_ov_model.py \
     mkdir /models && cd /models \
     && wget http://download.tensorflow.org/models/object_detection/ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz \
-    && tar -xvf ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz \
+    && tar --no-same-owner -xvf ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz \
     && python3 /build_ov_model.py
 
 ####
@@ -346,6 +346,7 @@ COPY web/package.json web/package-lock.json ./
 RUN npm install
 
 COPY web/ ./
+ENV NODE_OPTIONS=--max-old-space-size=3072
 RUN npm run build \
     && mv dist/BASE_PATH/monacoeditorwork/* dist/assets/ \
     && rm -rf dist/BASE_PATH
