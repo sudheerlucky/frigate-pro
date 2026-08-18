@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 
 import cv2
 import numpy as np
-from scipy import stats
 
 from frigate.config import FrigateConfig
 from frigate.const import FACE_DIR, MODEL_CACHE_DIR
@@ -133,37 +132,35 @@ class FaceRecognizer(ABC):
             return 0.0
 
 
-def build_class_mean(
+def build_class_references(
     embs: list[np.ndarray],
-    trim: float = 0.15,
     outlier_threshold: float = 0.30,
     min_keep_frac: float = 0.7,
     max_iters: int = 3,
-) -> np.ndarray:
-    """Build a class-mean embedding with two-layer outlier protection.
+) -> list[np.ndarray]:
+    """Prune outlier embeddings but keep each surviving reference as its own
+    vector instead of collapsing them into a single class-mean.
 
-    Layer 1 (iterative, vector-wise): drop whole embeddings whose cosine
-    similarity to the current class mean is below ``outlier_threshold``.
-    Catches mislabeled or corrupted training samples (wrong face in the
-    folder, full-frame screenshots, extreme crops) that per-dimension
-    trimming cannot detect.
+    A single averaged prototype blends dissimilar reference photos (a sharp
+    close-up next to a dim, blurry camera crop) into a vector that resembles
+    neither well. Matching a live face against the closest individual
+    reference (nearest-neighbor, like this) instead of one blended average
+    lets a single clean, representative photo win a match on its own,
+    rather than being diluted by lower-quality ones in the same folder.
 
-    Layer 2 (per-dimension): ``scipy.stats.trim_mean`` on the retained set
-    to smooth per-component noise (lighting, expression, alignment jitter).
-
-    Collections with fewer than 5 images bypass outlier rejection — too few
-    samples to establish a reliable class center.
+    Uses the same iterative vector-wise outlier rejection as
+    ``build_class_mean`` to still drop mislabeled/corrupted samples.
     """
     arr = np.stack(embs, axis=0)
 
     if len(arr) < 5:
-        return np.asarray(stats.trim_mean(arr, trim, axis=0))
+        return list(arr)
 
     keep = np.ones(len(arr), dtype=bool)
     floor = max(5, int(np.ceil(min_keep_frac * len(arr))))
 
     for _ in range(max_iters):
-        mean = stats.trim_mean(arr[keep], trim, axis=0)
+        mean = arr[keep].mean(axis=0)
         m_norm = mean / (np.linalg.norm(mean) + 1e-9)
         e_norms = arr / (np.linalg.norm(arr, axis=1, keepdims=True) + 1e-9)
         cos = e_norms @ m_norm
@@ -185,7 +182,28 @@ def build_class_mean(
             f"Vector-wise outlier filter dropped {dropped}/{len(arr)} embeddings"
         )
 
-    return np.asarray(stats.trim_mean(arr[keep], trim, axis=0))
+    return list(arr[keep])
+
+
+def best_match_confidence(
+    embedding: np.ndarray, references: list[np.ndarray], top_k: int = 3
+) -> float:
+    """Cosine similarity of a probe embedding against the top-k closest
+    individual reference embeddings for a person, averaged.
+
+    Averaging a small top-k (rather than taking the single best match)
+    guards against one lucky near-duplicate reference frame producing a
+    falsely high score, while still letting one clean reference dominate a
+    match instead of being dragged down by an unrelated blended average.
+    """
+    magnitude_probe = np.linalg.norm(embedding)
+    sims = [
+        float(np.dot(embedding, ref) / (magnitude_probe * np.linalg.norm(ref) + 1e-9))
+        for ref in references
+    ]
+    k = min(top_k, len(sims))
+    top = sorted(sims, reverse=True)[:k]
+    return sum(top) / k
 
 
 def similarity_to_confidence(
@@ -219,12 +237,12 @@ def similarity_to_confidence(
 class FaceNetRecognizer(FaceRecognizer):
     def __init__(self, config: FrigateConfig):
         super().__init__(config)
-        self.mean_embs: dict[str, np.ndarray] = {}
+        self.class_refs: dict[str, list[np.ndarray]] = {}
         self.face_embedder: FaceNetEmbedding = FaceNetEmbedding()
         self.model_builder_queue: queue.Queue | None = None
 
     def clear(self) -> None:
-        self.mean_embs = {}
+        self.class_refs = {}
 
     def run_build_task(self) -> None:
         self.model_builder_queue = queue.Queue()
@@ -284,7 +302,7 @@ class FaceNetRecognizer(FaceRecognizer):
 
         for name, embs in face_embeddings_map.items():
             if embs:
-                self.mean_embs[name] = build_class_mean(embs)
+                self.class_refs[name] = build_class_references(embs)
 
         logger.debug("Finished building ArcFace model")
 
@@ -292,10 +310,10 @@ class FaceNetRecognizer(FaceRecognizer):
         if not self.landmark_detector:
             return None
 
-        if not self.mean_embs:
+        if not self.class_refs:
             self.build()
 
-            if not self.mean_embs:
+            if not self.class_refs:
                 return None
 
         # face recognition is best run on grayscale images
@@ -310,12 +328,8 @@ class FaceNetRecognizer(FaceRecognizer):
         score: float = 0
         label = ""
 
-        for name, mean_emb in self.mean_embs.items():
-            dot_product = np.dot(embedding, mean_emb)
-            magnitude_A = np.linalg.norm(embedding)
-            magnitude_B = np.linalg.norm(mean_emb)
-
-            cosine_similarity = dot_product / (magnitude_A * magnitude_B)
+        for name, refs in self.class_refs.items():
+            cosine_similarity = best_match_confidence(embedding, refs)
             confidence = similarity_to_confidence(
                 cosine_similarity, median=0.5, range_width=0.6
             )
@@ -330,12 +344,12 @@ class FaceNetRecognizer(FaceRecognizer):
 class ArcFaceRecognizer(FaceRecognizer):
     def __init__(self, config: FrigateConfig):
         super().__init__(config)
-        self.mean_embs: dict[str, np.ndarray] = {}
+        self.class_refs: dict[str, list[np.ndarray]] = {}
         self.face_embedder: ArcfaceEmbedding = ArcfaceEmbedding(config.face_recognition)
         self.model_builder_queue: queue.Queue | None = None
 
     def clear(self) -> None:
-        self.mean_embs = {}
+        self.class_refs = {}
 
     def run_build_task(self) -> None:
         self.model_builder_queue = queue.Queue()
@@ -395,7 +409,7 @@ class ArcFaceRecognizer(FaceRecognizer):
 
         for name, embs in face_embeddings_map.items():
             if embs:
-                self.mean_embs[name] = build_class_mean(embs)
+                self.class_refs[name] = build_class_references(embs)
 
         logger.debug("Finished building ArcFace model")
 
@@ -403,10 +417,10 @@ class ArcFaceRecognizer(FaceRecognizer):
         if not self.landmark_detector:
             return None
 
-        if not self.mean_embs:
+        if not self.class_refs:
             self.build()
 
-            if not self.mean_embs:
+            if not self.class_refs:
                 return None
 
         # face recognition is best run on grayscale images
@@ -421,12 +435,8 @@ class ArcFaceRecognizer(FaceRecognizer):
         score: float = 0
         label = ""
 
-        for name, mean_emb in self.mean_embs.items():
-            dot_product = np.dot(embedding, mean_emb)
-            magnitude_A = np.linalg.norm(embedding)
-            magnitude_B = np.linalg.norm(mean_emb)
-
-            cosine_similarity = dot_product / (magnitude_A * magnitude_B)
+        for name, refs in self.class_refs.items():
+            cosine_similarity = best_match_confidence(embedding, refs)
             confidence = similarity_to_confidence(cosine_similarity)
 
             if confidence > score:
