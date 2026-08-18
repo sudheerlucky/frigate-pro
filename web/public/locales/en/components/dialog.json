@@ -52,6 +52,9 @@
     "name": {
       "placeholder": "Name the Export"
     },
+    "immich": {
+      "label": "Also export to Immich"
+    },
     "case": {
       "newCaseOption": "Create new case",
       "newCaseNamePlaceholder": "New case name",

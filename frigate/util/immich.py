@@ -1,6 +1,5 @@
-"""Import reference face photos for a person from a self-hosted Immich
-instance, scored and filtered for quality before handing them to Frigate's
-face recognizer.
+"""Immich integration: import reference face photos for face recognition,
+and export Frigate clips to a self-hosted Immich instance.
 
 Uses Immich's own face-detection bounding boxes to crop to the correct
 individual in a photo -- handing Frigate the whole photo and letting it
@@ -8,7 +7,10 @@ guess the largest face in frame risks registering the wrong person under a
 multi-person photo.
 """
 
+import datetime
 import logging
+import uuid
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -169,3 +171,71 @@ def fetch_candidate_faces(
         f"Immich import: {len(candidates)}/{len(asset_ids)} candidates passed quality filtering"
     )
     return candidates[: config.max_images_per_person]
+
+
+def _export_filename(export_time: float, camera: str, label: str | None) -> str:
+    """HomeKit Secure Video-style filename: date and time first, so exports
+    sort and scan chronologically at a glance, camera/label appended for
+    context."""
+    dt = datetime.datetime.fromtimestamp(export_time)
+    stamp = dt.strftime("%Y-%m-%d %H-%M-%S")
+    suffix = f" {label}" if label else ""
+    return f"{stamp} {camera}{suffix}.mp4"
+
+
+def ensure_album(config: ImmichConfig, album_name: str) -> str:
+    """Return the id of an Immich album with this name, creating it if it
+    doesn't exist yet."""
+    resp = _get(config, "/api/albums")
+    for album in resp.json():
+        if album["albumName"] == album_name:
+            return album["id"]
+
+    created = _post_json(config, "/api/albums", {"albumName": album_name, "assetIds": []})
+    logger.info(f"Immich export: created album '{album_name}' ({created['id']})")
+    return created["id"]
+
+
+def upload_video_export(
+    config: ImmichConfig,
+    video_path: str,
+    export_time: float,
+    camera: str,
+    label: str | None,
+    album_name: str,
+) -> str:
+    """Upload an exported clip to Immich, named like HomeKit Secure Video
+    exports (date + time first), and add it to the given album (created if
+    missing). Returns the Immich asset id."""
+    path = Path(video_path)
+    filename = _export_filename(export_time, camera, label)
+    iso_time = datetime.datetime.fromtimestamp(export_time).isoformat() + "Z"
+    device_asset_id = str(uuid.uuid4())
+
+    with open(path, "rb") as f:
+        resp = requests.post(
+            f"{config.host}/api/assets",
+            headers={"x-api-key": config.api_key},
+            data={
+                "deviceAssetId": device_asset_id,
+                "deviceId": "frigate-pro",
+                "fileCreatedAt": iso_time,
+                "fileModifiedAt": iso_time,
+            },
+            files={"assetData": (filename, f, "video/mp4")},
+            timeout=300,
+        )
+    resp.raise_for_status()
+    asset_id = resp.json()["id"]
+
+    album_id = ensure_album(config, album_name)
+    add_resp = requests.put(
+        f"{config.host}/api/albums/{album_id}/assets",
+        headers={"x-api-key": config.api_key},
+        json={"ids": [asset_id]},
+        timeout=30,
+    )
+    add_resp.raise_for_status()
+
+    logger.info(f"Immich export: uploaded '{filename}' as {asset_id}")
+    return asset_id

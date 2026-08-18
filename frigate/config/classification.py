@@ -287,6 +287,16 @@ class ImmichConfig(FrigateBaseModel):
         title="Minimum face size (px)",
         description="Minimum width/height in pixels of the cropped face region required to import an image.",
     )
+    export_enabled: bool = Field(
+        default=False,
+        title="Export clips to Immich",
+        description="When enabled, exported clips can be pushed directly to Immich into an auto-created album.",
+    )
+    export_album_name: str = Field(
+        default="Frigate Exports",
+        title="Export album name",
+        description="Immich album exported clips are added to; created automatically if it doesn't exist.",
+    )
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 

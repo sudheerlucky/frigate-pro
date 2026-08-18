@@ -77,6 +77,8 @@ const faceRecognition: SectionConfigOverrides = {
           "max_images_per_person",
           "min_sharpness",
           "min_face_size",
+          "export_enabled",
+          "export_album_name",
           "*",
         ],
       },

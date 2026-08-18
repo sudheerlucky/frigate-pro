@@ -53,6 +53,11 @@ class BatchExportBody(BaseModel):
         title="New case description",
         description="Optional description for a newly created export case",
     )
+    export_to_immich: bool = Field(
+        default=False,
+        title="Export to Immich",
+        description="If true, also upload each completed export in this batch to the configured Immich album.",
+    )
 
     @model_validator(mode="after")
     def validate_case_target(self) -> "BatchExportBody":

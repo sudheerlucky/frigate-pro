@@ -60,6 +60,7 @@ class ExportJob(Job):
     chapters: ChaptersEnum | None = None
     current_step: str = "queued"
     progress_percent: float = 0.0
+    export_to_immich: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses.
@@ -83,6 +84,7 @@ class ExportJob(Job):
             "results": self.results,
             "current_step": self.current_step,
             "progress_percent": self.progress_percent,
+            "export_to_immich": self.export_to_immich,
         }
 
 
@@ -367,6 +369,9 @@ class ExportJobManager:
                     "video_path": export.video_path,
                     "thumb_path": export.thumb_path,
                 }
+
+                if job.export_to_immich:
+                    self._upload_to_immich(job, export.video_path)
         except DoesNotExist:
             job.status = JobStatusTypesEnum.failed
             job.error_message = "Export not found"
@@ -378,6 +383,37 @@ class ExportJobManager:
             job.end_time = time.time()
             self._broadcast_all_jobs(force=True)
             self._schedule_job_cleanup(job.id)
+
+    def _upload_to_immich(self, job: ExportJob, video_path: str) -> None:
+        """Upload a successfully exported clip to Immich. Never raises --
+        the local export already succeeded, so an Immich upload failure is
+        reported as a warning in the job results, not a failed export."""
+        immich_config = self.config.face_recognition.immich
+
+        if not immich_config.export_enabled or not immich_config.host or not immich_config.api_key:
+            logger.warning(
+                "Export job %s requested Immich upload but Immich export is not configured",
+                job.id,
+            )
+            return
+
+        from frigate.util.immich import upload_video_export
+
+        try:
+            asset_id = upload_video_export(
+                immich_config,
+                video_path,
+                job.request_start_time,
+                job.camera,
+                job.name,
+                immich_config.export_album_name,
+            )
+            if job.results is not None:
+                job.results["immich_asset_id"] = asset_id
+        except Exception as err:
+            logger.exception("Export job %s: Immich upload failed: %s", job.id, err)
+            if job.results is not None:
+                job.results["immich_upload_error"] = str(err)
 
 
 _job_manager: ExportJobManager | None = None

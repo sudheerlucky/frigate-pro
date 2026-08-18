@@ -260,6 +260,7 @@ def _build_export_job(
     ffmpeg_output_args: str | None = None,
     cpu_fallback: bool = False,
     chapters: ChaptersEnum | None = None,
+    export_to_immich: bool = False,
 ) -> ExportJob:
     return ExportJob(
         id=_generate_export_id(camera_name),
@@ -274,6 +275,7 @@ def _build_export_job(
         ffmpeg_output_args=ffmpeg_output_args,
         cpu_fallback=cpu_fallback,
         chapters=chapters,
+        export_to_immich=export_to_immich,
     )
 
 
@@ -735,6 +737,7 @@ def export_recordings_batch(
             chapters=request.app.frigate_config.cameras[
                 item.camera
             ].record.export.chapters,
+            export_to_immich=body.export_to_immich,
         )
         try:
             start_export_job(request.app.frigate_config, export_job)
@@ -858,6 +861,7 @@ def export_recording(
         playback_source,
         export_case_id,
         chapters=chapters,
+        export_to_immich=body.export_to_immich,
     )
     try:
         start_export_job(request.app.frigate_config, export_job)
@@ -1009,6 +1013,7 @@ def export_recording_custom(
         ffmpeg_input_args,
         ffmpeg_output_args,
         cpu_fallback,
+        export_to_immich=body.export_to_immich,
     )
     try:
         start_export_job(request.app.frigate_config, export_job)

@@ -27,6 +27,11 @@ class ExportRecordingsBody(BaseModel):
             "the camera's configured export chapter mode is used."
         ),
     )
+    export_to_immich: bool = Field(
+        default=False,
+        title="Export to Immich",
+        description="If true, also upload the completed export to the configured Immich album.",
+    )
 
 
 class ExportRecordingsCustomBody(BaseModel):
@@ -55,4 +60,9 @@ class ExportRecordingsCustomBody(BaseModel):
         default=False,
         title="CPU Fallback",
         description="If true, retry export without hardware acceleration if the initial export fails.",
+    )
+    export_to_immich: bool = Field(
+        default=False,
+        title="Export to Immich",
+        description="If true, also upload the completed export to the configured Immich album.",
     )

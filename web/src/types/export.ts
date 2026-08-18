@@ -23,6 +23,7 @@ export type BatchExportBody = {
   export_case_id?: string;
   new_case_name?: string;
   new_case_description?: string;
+  export_to_immich?: boolean;
 };
 
 export const MAX_BATCH_EXPORT_ITEMS = 50;

@@ -26,6 +26,8 @@ export interface ImmichConfig {
   max_images_per_person: number;
   min_sharpness: number;
   min_face_size: number;
+  export_enabled: boolean;
+  export_album_name: string;
 }
 
 export interface FaceRecognitionConfig {

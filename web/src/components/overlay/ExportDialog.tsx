@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
+import { Checkbox } from "../ui/checkbox";
 import { Label } from "../ui/label";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { Button } from "../ui/button";
@@ -110,6 +111,7 @@ export default function ExportDialog({
 }: ExportDialogProps) {
   const { t } = useTranslation(["components/dialog"]);
   const [name, setName] = useState("");
+  const [exportToImmich, setExportToImmich] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>();
   const [singleNewCaseName, setSingleNewCaseName] = useState("");
   const [singleNewCaseDescription, setSingleNewCaseDescription] = useState("");
@@ -179,6 +181,7 @@ export default function ExportDialog({
           source: "recordings",
           name,
           export_case_id: exportCaseId,
+          export_to_immich: exportToImmich,
         },
       );
 
@@ -195,6 +198,7 @@ export default function ExportDialog({
         ),
       });
       setName("");
+      setExportToImmich(false);
       setSelectedCaseId(undefined);
       setSingleNewCaseName("");
       setSingleNewCaseDescription("");
@@ -226,6 +230,7 @@ export default function ExportDialog({
     camera,
     isStartingExport,
     name,
+    exportToImmich,
     range,
     selectedCaseId,
     singleNewCaseDescription,
@@ -746,6 +751,7 @@ export function ExportContent({
           ? `${name} - ${resolveCameraName(config, cameraId)}`
           : undefined,
       })),
+      export_to_immich: exportToImmich,
     };
 
     if (isAdmin && batchCaseSelection !== "none") {
@@ -855,6 +861,7 @@ export function ExportContent({
     isAdmin,
     isStartingBatchExport,
     name,
+    exportToImmich,
     newCaseDescription,
     newCaseName,
     range,
@@ -960,6 +967,17 @@ export function ExportContent({
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="export-to-immich"
+              checked={exportToImmich}
+              onCheckedChange={(checked) => setExportToImmich(checked === true)}
+            />
+            <Label htmlFor="export-to-immich" className="cursor-pointer text-sm">
+              {t("export.immich.label")}
+            </Label>
+          </div>
 
           {isAdmin && (
             <div className="space-y-2">
