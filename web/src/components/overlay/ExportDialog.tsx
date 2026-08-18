@@ -344,6 +344,8 @@ export default function ExportDialog({
             currentTime={currentTime}
             range={range}
             name={name}
+            exportToImmich={exportToImmich}
+            setExportToImmich={setExportToImmich}
             selectedCaseId={selectedCaseId}
             singleNewCaseName={singleNewCaseName}
             singleNewCaseDescription={singleNewCaseDescription}
@@ -378,6 +380,8 @@ type ExportContentProps = {
   currentTime: number;
   range?: TimeRange;
   name: string;
+  exportToImmich: boolean;
+  setExportToImmich: (value: boolean) => void;
   selectedCaseId?: string;
   singleNewCaseName: string;
   singleNewCaseDescription: string;
@@ -407,6 +411,8 @@ export function ExportContent({
   currentTime,
   range,
   name,
+  exportToImmich,
+  setExportToImmich,
   selectedCaseId,
   singleNewCaseName,
   singleNewCaseDescription,

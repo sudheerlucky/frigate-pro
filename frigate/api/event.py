@@ -1009,6 +1009,50 @@ async def event(event_id: str, request: Request):
         return JSONResponse(content="Event not found", status_code=404)
 
 
+@router.get(
+    "/events/{event_id}/likely_journey",
+    dependencies=[Depends(allow_any_authenticated())],
+    summary="Find likely cross-camera matches for a person event",
+    description="""Looks for the same person appearing on other cameras shortly before or
+    after this event, to link them into a single cross-camera journey. Uses face recognition
+    as the primary signal (an exact identity match, if this event already has a recognized
+    sub_label); falls back to visual-similarity matching using Frigate's existing thumbnail
+    embeddings when face recognition doesn't produce a name. The fallback is a general-purpose
+    appearance heuristic, not a dedicated person re-identification model, so its matches are
+    reported with a confidence score, never as confirmed identity.""",
+)
+async def event_likely_journey(
+    event_id: str, request: Request, window_seconds: int = 30
+):
+    try:
+        event = Event.get(Event.id == event_id)
+        await require_camera_access(event.camera, request=request)
+    except DoesNotExist:
+        return JSONResponse(content="Event not found", status_code=404)
+
+    from frigate.util.person_journey import find_likely_journey_matches
+
+    context: EmbeddingsContext = request.app.embeddings
+
+    if context is None:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Could not process request. Try restarting Frigate.",
+            },
+            status_code=500,
+        )
+
+    matches = find_likely_journey_matches(
+        request.app.frigate_config, context, event_id, window_seconds
+    )
+
+    return JSONResponse(
+        content={"success": True, "event_id": event_id, "matches": matches},
+        status_code=200,
+    )
+
+
 @router.post(
     "/events/{event_id}/retain",
     response_model=GenericResponse,

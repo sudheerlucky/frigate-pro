@@ -139,6 +139,7 @@ export default function MobileReviewSettingsDrawer({
   // exports
 
   const [name, setName] = useState("");
+  const [exportToImmich, setExportToImmich] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(
     undefined,
   );
@@ -210,6 +211,7 @@ export default function MobileReviewSettingsDrawer({
           source: "recordings",
           name,
           export_case_id: exportCaseId,
+          export_to_immich: exportToImmich,
         },
       );
 
@@ -228,6 +230,7 @@ export default function MobileReviewSettingsDrawer({
         ),
       });
       setName("");
+      setExportToImmich(false);
       setSelectedCaseId(undefined);
       setSingleNewCaseName("");
       setSingleNewCaseDescription("");
@@ -262,6 +265,7 @@ export default function MobileReviewSettingsDrawer({
     camera,
     isStartingExport,
     name,
+    exportToImmich,
     range,
     selectedCaseId,
     singleNewCaseDescription,
@@ -457,6 +461,8 @@ export default function MobileReviewSettingsDrawer({
         currentTime={currentTime}
         range={range}
         name={name}
+        exportToImmich={exportToImmich}
+        setExportToImmich={setExportToImmich}
         selectedCaseId={selectedCaseId}
         singleNewCaseName={singleNewCaseName}
         singleNewCaseDescription={singleNewCaseDescription}

@@ -92,6 +92,7 @@ class Dispatcher:
             "motion_mask": self._on_motion_mask_command,
             "object_mask": self._on_object_mask_command,
             "zone": self._on_zone_command,
+            "tapo_night_vision": self._on_tapo_night_vision_command,
         }
         self._global_settings_handlers: dict[str, Callable] = {
             "notifications": self._on_global_notification_command,
@@ -567,6 +568,36 @@ class Dispatcher:
         )
         self._runtime_state.set(camera_name, "detect", detect_settings.enabled)
         self.publish(f"{camera_name}/detect/state", payload, retain=True)
+
+    def _on_tapo_night_vision_command(self, camera_name: str, payload: str) -> None:
+        """Callback for tapo_night_vision topic -- local (no-cloud) IR/night
+        vision control for a TP-Link Tapo camera. Unlike the other camera
+        settings here, this isn't a Frigate config flag; it's a live network
+        call to the camera itself, so failures are logged and the state
+        topic is only published back on success."""
+        tapo_config = self.config.cameras[camera_name].tapo
+
+        if not tapo_config.enabled or not tapo_config.host or not tapo_config.username:
+            logger.error(f"Tapo control is not configured for {camera_name}")
+            return
+
+        mode = payload.strip().lower()
+
+        from frigate.util.tapo import VALID_DAY_NIGHT_MODES, set_night_vision_mode
+
+        if mode not in VALID_DAY_NIGHT_MODES:
+            logger.error(f"Invalid Tapo night vision mode for {camera_name}: {payload}")
+            return
+
+        try:
+            set_night_vision_mode(tapo_config, mode)
+        except Exception as e:
+            logger.error(f"Failed to set Tapo night vision mode for {camera_name}: {e}")
+            return
+
+        self.publish(
+            f"{camera_name}/tapo_night_vision/state", mode.upper(), retain=True
+        )
 
     def _on_enabled_command(self, camera_name: str, payload: str) -> None:
         """Callback for camera topic."""

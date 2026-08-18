@@ -8,6 +8,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 
 from frigate.comms.base_communicator import Communicator
 from frigate.config import FrigateConfig
+from frigate.config.camera.tapo import TapoConfig
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,52 @@ class MqttClient(Communicator):
             cam.enabled and cam.notifications.enabled_in_config
             for cam in self.config.cameras.values()
         )
+
+    def _publish_tapo_discovery(self, camera_name: str) -> None:
+        """Publish Home Assistant MQTT Discovery config for a Tapo camera's
+        night vision mode, so it shows up as a `select` entity automatically
+        -- no manual MQTT entity configuration needed in Home Assistant."""
+        import json
+
+        unique_id = f"frigate_{camera_name}_tapo_night_vision"
+        discovery_payload = {
+            "name": "Night Vision",
+            "unique_id": unique_id,
+            "state_topic": f"{self.mqtt_config.topic_prefix}/{camera_name}/tapo_night_vision/state",
+            "command_topic": f"{self.mqtt_config.topic_prefix}/{camera_name}/tapo_night_vision/set",
+            "options": ["OFF", "ON", "AUTO"],
+            "icon": "mdi:weather-night",
+            "device": {
+                "identifiers": [f"frigate_{camera_name}"],
+                "name": f"Frigate {camera_name}",
+                "manufacturer": "Frigate",
+            },
+        }
+        self.client.publish(
+            f"homeassistant/select/{unique_id}/config",
+            json.dumps(discovery_payload),
+            qos=self.config.mqtt.qos,
+            retain=True,
+        )
+
+    def _publish_tapo_initial_state(
+        self, camera_name: str, tapo_config: TapoConfig
+    ) -> None:
+        """Best-effort: query the camera's current night vision mode and
+        publish it. Never allowed to raise -- this runs inside the shared
+        per-camera loop in _set_initial_topics, so an exception here must
+        not prevent other cameras' state from being published."""
+        try:
+            from frigate.util.tapo import get_night_vision_mode
+
+            mode = get_night_vision_mode(tapo_config)
+            self.publish(
+                f"{camera_name}/tapo_night_vision/state", mode.upper(), retain=True
+            )
+        except Exception as e:
+            logger.warning(
+                f"Could not fetch initial Tapo night vision state for {camera_name}: {e}"
+            )
 
     def _set_initial_topics(self) -> None:
         """Set initial state topics."""
@@ -151,6 +198,10 @@ class MqttClient(Communicator):
                 "ON" if camera.review.genai.enabled_in_config else "OFF",
                 retain=True,
             )
+
+            if camera.tapo.enabled and camera.tapo.host and camera.tapo.username:
+                self._publish_tapo_discovery(camera_name)
+                self._publish_tapo_initial_state(camera_name, camera.tapo)
 
             for mask_name, motion_mask in camera.motion.mask.items():
                 if motion_mask:
@@ -294,6 +345,12 @@ class MqttClient(Communicator):
             if self.config.cameras[name].onvif.host:
                 self.client.message_callback_add(
                     f"{self.mqtt_config.topic_prefix}/{name}/ptz",
+                    self.on_mqtt_command,
+                )
+
+            if self.config.cameras[name].tapo.enabled:
+                self.client.message_callback_add(
+                    f"{self.mqtt_config.topic_prefix}/{name}/tapo_night_vision/set",
                     self.on_mqtt_command,
                 )
 
