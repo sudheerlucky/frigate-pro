@@ -13,7 +13,7 @@ build-boards: $(BOARDS:%=build-%)
 push-boards: $(BOARDS:%=push-%)
 
 version:
-	echo 'VERSION = "$(VERSION)-$(COMMIT_HASH)"' > frigate/version.py
+	echo 'VERSION = "0.18.0-$(VERSION)-$(COMMIT_HASH)"' > frigate/version.py
 	echo 'VITE_GIT_COMMIT_HASH=$(COMMIT_HASH)' > web/.env
 
 local: version

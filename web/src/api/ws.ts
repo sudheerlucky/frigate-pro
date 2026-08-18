@@ -12,6 +12,7 @@ import {
   FrigateEvent,
   FrigateReview,
   ModelState,
+  TapoNightVisionSetting,
   ToggleableSetting,
   TrackedObjectUpdateReturnType,
   TriggerStatus,
@@ -358,6 +359,17 @@ export function useAlertsState(camera: string): {
     send,
   } = useWs(`${camera}/review_alerts/state`, `${camera}/review_alerts/set`);
   return { payload: payload as ToggleableSetting, send };
+}
+
+export function useTapoNightVisionState(camera: string): {
+  payload: TapoNightVisionSetting;
+  send: (payload: TapoNightVisionSetting, retain?: boolean) => void;
+} {
+  const {
+    value: { payload },
+    send,
+  } = useWs(`${camera}/tapo_night_vision/state`, `${camera}/tapo_night_vision/set`);
+  return { payload: payload as TapoNightVisionSetting, send };
 }
 
 export function useDetectionsState(camera: string): {

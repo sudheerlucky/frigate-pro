@@ -8,6 +8,7 @@ multi-person photo.
 """
 
 import datetime
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -17,10 +18,35 @@ import numpy as np
 import requests
 
 from frigate.config.classification import ImmichConfig
+from frigate.const import FACE_DIR
 
 logger = logging.getLogger(__name__)
 
 MARGIN = 0.4  # extra context around the tight face box, as a fraction of box size
+
+
+def _imported_assets_path(name: str) -> Path:
+    return Path(FACE_DIR) / name / ".immich_imported.json"
+
+
+def load_imported_asset_ids(name: str) -> set[str]:
+    """Immich asset ids already registered with Frigate for this person in a
+    previous import, so re-running the import doesn't re-download and
+    re-register the same photos every time."""
+    path = _imported_assets_path(name)
+    if not path.exists():
+        return set()
+    try:
+        return set(json.loads(path.read_text()))
+    except Exception as e:
+        logger.warning(f"Immich import: could not read imported-asset record for {name}: {e}")
+        return set()
+
+
+def save_imported_asset_ids(name: str, asset_ids: set[str]) -> None:
+    path = _imported_assets_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sorted(asset_ids)))
 
 
 class ImmichImportError(Exception):
@@ -122,15 +148,24 @@ def _sharpness(image: np.ndarray) -> float:
 
 
 def fetch_candidate_faces(
-    config: ImmichConfig, person_id: str
+    config: ImmichConfig, person_id: str, skip_asset_ids: set[str] | None = None
 ) -> list[dict]:
     """Fetch, crop, and quality-score every candidate face photo for a
     person. Returns a list of dicts (sorted best-quality first) each with
     the encoded crop bytes and its sharpness/size scores, filtered to those
     meeting the configured minimums. Does not touch Frigate -- caller
-    decides what to do with the results (e.g. take the top N)."""
-    asset_ids = _get_asset_ids(config, person_id)
-    logger.info(f"Immich import: found {len(asset_ids)} candidate photos")
+    decides what to do with the results (e.g. take the top N).
+
+    skip_asset_ids lets a re-import only fetch photos that weren't already
+    registered in a previous run, instead of blindly re-downloading and
+    re-registering the whole library every time."""
+    all_asset_ids = _get_asset_ids(config, person_id)
+    skip_asset_ids = skip_asset_ids or set()
+    asset_ids = [a for a in all_asset_ids if a not in skip_asset_ids]
+    logger.info(
+        f"Immich import: found {len(all_asset_ids)} candidate photos, "
+        f"{len(asset_ids)} new (skipping {len(all_asset_ids) - len(asset_ids)} already imported)"
+    )
 
     candidates = []
     for asset_id in asset_ids:

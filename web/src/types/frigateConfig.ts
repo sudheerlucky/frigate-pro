@@ -212,6 +212,12 @@ export interface CameraConfig {
     user: string | null;
     tls_insecure: boolean;
   };
+  tapo: {
+    enabled: boolean;
+    host: string;
+    username: string;
+    password: string | null;
+  };
   record: {
     enabled: boolean;
     enabled_in_config: boolean;

@@ -100,6 +100,7 @@ export type EmbeddingsReindexProgressType = {
 };
 
 export type ToggleableSetting = "ON" | "OFF";
+export type TapoNightVisionSetting = "OFF" | "ON" | "AUTO";
 
 export type TrackedObjectUpdateType =
   | "description"

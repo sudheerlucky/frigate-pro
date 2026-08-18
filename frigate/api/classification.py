@@ -356,7 +356,12 @@ def import_immich_faces(request: Request, name: str):
             },
         )
 
-    from frigate.util.immich import fetch_candidate_faces, find_person_id
+    from frigate.util.immich import (
+        fetch_candidate_faces,
+        find_person_id,
+        load_imported_asset_ids,
+        save_imported_asset_ids,
+    )
 
     try:
         person_id = find_person_id(immich_config, name)
@@ -375,8 +380,12 @@ def import_immich_faces(request: Request, name: str):
             },
         )
 
+    already_imported = load_imported_asset_ids(name)
+
     try:
-        candidates = fetch_candidate_faces(immich_config, person_id)
+        candidates = fetch_candidate_faces(
+            immich_config, person_id, skip_asset_ids=already_imported
+        )
     except Exception as e:
         return JSONResponse(
             status_code=502,
@@ -385,6 +394,7 @@ def import_immich_faces(request: Request, name: str):
 
     context: EmbeddingsContext = request.app.embeddings
     registered = 0
+    newly_imported_ids = set()
 
     for candidate in candidates:
         result = None if context is None else context.register_face(
@@ -392,12 +402,17 @@ def import_immich_faces(request: Request, name: str):
         )
         if isinstance(result, dict) and result.get("success"):
             registered += 1
+            newly_imported_ids.add(candidate["asset_id"])
+
+    if newly_imported_ids:
+        save_imported_asset_ids(name, already_imported | newly_imported_ids)
 
     return JSONResponse(
         status_code=200,
         content={
             "success": True,
-            "message": f"Imported {registered}/{len(candidates)} quality-filtered photos from Immich.",
+            "message": f"Imported {registered}/{len(candidates)} new quality-filtered photos from Immich "
+            f"({len(already_imported)} already imported previously, skipped).",
         },
     )
 

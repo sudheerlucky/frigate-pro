@@ -68,6 +68,14 @@
     "enable": "Enable Detect",
     "disable": "Disable Detect"
   },
+  "tapoNightVision": {
+    "off": "IR: Off",
+    "on": "IR: On",
+    "auto": "IR: Auto",
+    "setOff": "Turn off IR / night vision",
+    "setOn": "Turn on IR / night vision",
+    "setAuto": "Set IR / night vision to auto"
+  },
   "recording": {
     "enable": "Enable Recording",
     "disable": "Disable Recording",

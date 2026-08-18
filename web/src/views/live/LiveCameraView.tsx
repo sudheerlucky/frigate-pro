@@ -5,6 +5,7 @@ import {
   useAutotrackingState,
   useDetectState,
   useEnabledState,
+  useTapoNightVisionState,
   usePtzCommand,
   useRecordingsState,
   useSnapshotsState,
@@ -71,9 +72,12 @@ import {
   LuExternalLink,
   LuHistory,
   LuInfo,
+  LuMoon,
+  LuMoonStar,
   LuPictureInPicture,
   LuPower,
   LuPowerOff,
+  LuSun,
   LuVideo,
   LuVideoOff,
   LuX,
@@ -885,6 +889,8 @@ function FrigateCameraFeatures({
     useAutotrackingState(camera.name);
   const { payload: transcriptionState, send: sendTranscription } =
     useAudioTranscriptionState(camera.name);
+  const { payload: tapoNightVisionState, send: sendTapoNightVision } =
+    useTapoNightVisionState(camera.name);
 
   // roles
 
@@ -1143,6 +1149,37 @@ function FrigateCameraFeatures({
                 }
                 onClick={() =>
                   sendAutotracking(autotrackingState == "ON" ? "OFF" : "ON")
+                }
+                disabled={!cameraEnabled}
+              />
+            )}
+            {camera.tapo?.enabled && (
+              <CameraFeatureToggle
+                className="p-2 md:p-0"
+                variant={fullscreen ? "overlay" : "primary"}
+                Icon={
+                  tapoNightVisionState == "ON"
+                    ? LuMoon
+                    : tapoNightVisionState == "AUTO"
+                      ? LuMoonStar
+                      : LuSun
+                }
+                isActive={tapoNightVisionState == "ON"}
+                title={
+                  tapoNightVisionState == "OFF"
+                    ? t("tapoNightVision.setOn")
+                    : tapoNightVisionState == "ON"
+                      ? t("tapoNightVision.setAuto")
+                      : t("tapoNightVision.setOff")
+                }
+                onClick={() =>
+                  sendTapoNightVision(
+                    tapoNightVisionState == "OFF"
+                      ? "ON"
+                      : tapoNightVisionState == "ON"
+                        ? "AUTO"
+                        : "OFF",
+                  )
                 }
                 disabled={!cameraEnabled}
               />
