@@ -79,6 +79,8 @@ const faceRecognition: SectionConfigOverrides = {
           "min_face_size",
           "export_enabled",
           "export_album_name",
+          "auto_identify_enabled",
+          "auto_identify_threshold",
           "*",
         ],
       },

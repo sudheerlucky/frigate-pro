@@ -56,6 +56,7 @@
     "addFace": "Add Face",
     "renameFace": "Rename Face",
     "importImmich": "Import from Immich",
+    "autoIdentify": "Auto-identify (Immich)",
     "deleteFace": "Delete Face",
     "uploadImage": "Upload Image",
     "reprocessFace": "Reprocess Face"
@@ -75,7 +76,8 @@
   "reclassifyFace": "Reclassify Face",
   "toast": {
     "info": {
-      "importingFromImmich": "Importing photos of {{name}} from Immich..."
+      "importingFromImmich": "Importing photos of {{name}} from Immich...",
+      "autoIdentifying": "Checking unknown faces against Immich..."
     },
     "success": {
       "uploadedImage": "Successfully uploaded image.",
@@ -99,6 +101,7 @@
       "trainFailed": "Failed to train: {{errorMessage}}",
       "reclassifyFailed": "Failed to reclassify face: {{errorMessage}}",
       "importImmichFailed": "Failed to import from Immich: {{errorMessage}}",
+      "autoIdentifyFailed": "Failed to auto-identify: {{errorMessage}}",
       "updateFaceScoreFailed": "Failed to update face score: {{errorMessage}}"
     }
   }

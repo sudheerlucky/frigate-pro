@@ -267,6 +267,34 @@ export default function FaceLibrary() {
     [setPageToggle, refreshFaces, t],
   );
 
+  const [isAutoIdentifying, setIsAutoIdentifying] = useState(false);
+  const onAutoIdentifyUnknown = useCallback(() => {
+    setIsAutoIdentifying(true);
+    toast.info(t("toast.info.autoIdentifying"), {
+      position: "top-center",
+    });
+    axios
+      .post("/faces/auto_identify_unknown")
+      .then((resp) => {
+        if (resp.status === 200) {
+          toast.success(resp.data.message, {
+            position: "top-center",
+          });
+          refreshFaces();
+        }
+      })
+      .catch((error) => {
+        const errorMessage =
+          error.response?.data?.message ||
+          error.response?.data?.detail ||
+          "Unknown error";
+        toast.error(t("toast.error.autoIdentifyFailed", { errorMessage }), {
+          position: "top-center",
+        });
+      })
+      .finally(() => setIsAutoIdentifying(false));
+  }, [refreshFaces, t]);
+
   const onImportImmich = useCallback(
     (name: string) => {
       toast.info(t("toast.info.importingFromImmich", { name }), {
@@ -480,6 +508,16 @@ export default function FaceLibrary() {
               <LuScanFace className="size-7 rounded-md p-1 text-secondary-foreground" />
               {isDesktop && t("button.addFace")}
             </Button>
+            {pageToggle === "train" && (
+              <Button
+                className="flex gap-2"
+                disabled={isAutoIdentifying}
+                onClick={onAutoIdentifyUnknown}
+              >
+                <LuRefreshCw className="size-7 rounded-md p-1 text-secondary-foreground" />
+                {isDesktop && t("button.autoIdentify")}
+              </Button>
+            )}
             {pageToggle != "train" && (
               <Button className="flex gap-2" onClick={() => setUpload(true)}>
                 <LuImagePlus className="size-7 rounded-md p-1 text-secondary-foreground" />

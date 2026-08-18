@@ -403,6 +403,62 @@ def import_immich_faces(request: Request, name: str):
 
 
 @router.post(
+    "/faces/auto_identify_unknown",
+    response_model=GenericResponse,
+    dependencies=[Depends(require_role(["admin"]))],
+    summary="Auto-identify unknown faces via Immich",
+    description="""Scans Frigate's unknown-face queue, matches each crop against every named
+    person in a configured Immich instance (Immich exposes no reverse face-search API, so the
+    matching runs locally using Frigate's own face embedder), and auto-registers any match at
+    or above the configured confidence threshold. This can take a while for a large unknown
+    queue or a large Immich library -- it runs synchronously and returns once the pass
+    completes.""",
+)
+def auto_identify_unknown_faces(request: Request):
+    if not request.app.frigate_config.face_recognition.enabled:
+        return JSONResponse(
+            status_code=400,
+            content={"message": "Face recognition is not enabled.", "success": False},
+        )
+
+    from frigate.util.immich_auto_identify import run_auto_identify_pass
+
+    context: EmbeddingsContext = request.app.embeddings
+
+    if context is None:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": "Could not process request. Try restarting Frigate.",
+            },
+        )
+
+    try:
+        summary = run_auto_identify_pass(request.app.frigate_config, context)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"message": str(e), "success": False})
+    except Exception as e:
+        return JSONResponse(
+            status_code=502,
+            content={"message": f"Auto-identify pass failed: {e}", "success": False},
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "message": (
+                f"Checked {summary['checked']} unknown faces against "
+                f"{summary['people_available']} Immich people, identified "
+                f"{summary['identified']}."
+            ),
+            "details": summary,
+        },
+    )
+
+
+@router.post(
     "/faces/recognize",
     response_model=FaceRecognitionResponse,
     summary="Recognize a face from an uploaded image",

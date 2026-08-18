@@ -28,6 +28,8 @@ export interface ImmichConfig {
   min_face_size: number;
   export_enabled: boolean;
   export_album_name: string;
+  auto_identify_enabled: boolean;
+  auto_identify_threshold: number;
 }
 
 export interface FaceRecognitionConfig {

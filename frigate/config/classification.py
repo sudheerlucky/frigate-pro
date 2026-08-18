@@ -297,6 +297,18 @@ class ImmichConfig(FrigateBaseModel):
         title="Export album name",
         description="Immich album exported clips are added to; created automatically if it doesn't exist.",
     )
+    auto_identify_enabled: bool = Field(
+        default=False,
+        title="Auto-identify unknown faces",
+        description="When enabled, unknown face crops can be matched against Immich's named people and auto-registered on a high-confidence match.",
+    )
+    auto_identify_threshold: float = Field(
+        default=0.95,
+        ge=0.5,
+        le=1.0,
+        title="Auto-identify confidence threshold",
+        description="Minimum match confidence required to auto-register an unknown face under an Immich person's name.",
+    )
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
