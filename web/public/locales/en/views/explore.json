@@ -196,6 +196,10 @@
       "label": "Find similar",
       "aria": "Find similar tracked objects"
     },
+    "viewJourney": {
+      "label": "View journey",
+      "aria": "View this person's journey across cameras"
+    },
     "addTrigger": {
       "label": "Add trigger",
       "aria": "Add a trigger for this tracked object"
@@ -261,5 +265,14 @@
   },
   "objectLifecycle": {
     "noImageFound": "No image found for this tracked object."
+  },
+  "journey": {
+    "title": "Journey",
+    "desc": "Other cameras this person likely appeared on around the same time. Face matches are confirmed identity; other matches are a visual-similarity estimate, not a guarantee.",
+    "source": "Source",
+    "confirmed": "Confirmed",
+    "likelyMatch": "Likely match ({{confidence}}%)",
+    "loading": "Looking for matches on other cameras...",
+    "noMatches": "No likely matches found on other cameras."
   }
 }

@@ -34,6 +34,7 @@ import { Trans, useTranslation } from "react-i18next";
 import BlurredIconButton from "../button/BlurredIconButton";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useNavigate } from "react-router-dom";
+import JourneyView from "../overlay/JourneyView";
 
 type SearchResultActionsProps = {
   searchResult: SearchResult;
@@ -62,6 +63,7 @@ export default function SearchResultActions({
   const { data: config } = useSWR<FrigateConfig>("config");
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [journeyOpen, setJourneyOpen] = useState(false);
 
   const handleDelete = () => {
     axios
@@ -202,6 +204,14 @@ export default function SearchResultActions({
             <span>{t("itemMenu.findSimilar.label")}</span>
           </MenuItem>
         )}
+      {searchResult.label === "person" && (
+        <MenuItem
+          aria-label={t("itemMenu.viewJourney.aria")}
+          onClick={() => setJourneyOpen(true)}
+        >
+          <span>{t("itemMenu.viewJourney.label")}</span>
+        </MenuItem>
+      )}
       {isAdmin &&
         config?.semantic_search?.enabled &&
         searchResult.data.type == "object" && (
@@ -239,6 +249,12 @@ export default function SearchResultActions({
 
   return (
     <>
+      <JourneyView
+        eventId={journeyOpen ? searchResult.id : null}
+        sourceCamera={searchResult.camera}
+        open={journeyOpen}
+        setOpen={setJourneyOpen}
+      />
       <AlertDialog
         open={deleteDialogOpen}
         onOpenChange={() => setDeleteDialogOpen(!deleteDialogOpen)}
