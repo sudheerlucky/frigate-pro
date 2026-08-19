@@ -274,7 +274,9 @@
     "likelyMatch": "Likely match ({{confidence}}%)",
     "hop": "hop {{number}}",
     "loading": "Looking for matches on other cameras...",
-    "noMatches": "No likely matches found on other cameras."
+    "noMatches": "No likely matches found on other cameras.",
+    "mergeClip": "Download as one merged clip",
+    "mergeClipNote": "Re-encodes and stitches every matched clip together in order. Takes real time to generate -- the download will start once it's ready."
   },
   "journeysPage": {
     "title": "Journeys",

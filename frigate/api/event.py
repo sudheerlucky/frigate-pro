@@ -15,7 +15,7 @@ from urllib.parse import unquote
 import numpy as np
 from fastapi import APIRouter, Request
 from fastapi.params import Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from peewee import JOIN, DoesNotExist, fn, operator
 from playhouse.shortcuts import model_to_dict
 
@@ -1066,6 +1066,70 @@ async def event_likely_journey(
             "matches": matches,
         },
         status_code=200,
+    )
+
+
+@router.get(
+    "/events/{event_id}/journey/merged_clip.mp4",
+    dependencies=[Depends(allow_any_authenticated())],
+    summary="Download a single merged clip of a confirmed Journey chain",
+    description="""Chain-walks the same way /likely_journey does, then downloads each
+    matched event's own clip, re-encodes them all to a common resolution (cameras in a
+    Journey chain may have different native resolutions), and concatenates them in
+    chronological order into a single downloadable video. This is real transcoding, not a
+    stream copy, so it takes real time proportional to the total footage length -- expect
+    a multi-second wait for the download to start. Video-only; audio is not merged.""",
+)
+async def event_journey_merged_clip(
+    event_id: str, request: Request, hop_window_seconds: int = 45, max_hops: int = 5,
+):
+    try:
+        event = Event.get(Event.id == event_id)
+        await require_camera_access(event.camera, request=request)
+    except DoesNotExist:
+        return JSONResponse(content="Event not found", status_code=404)
+
+    from frigate.util.journey_clip import build_merged_journey_clip
+    from frigate.util.person_journey import find_likely_journey_matches
+
+    context: EmbeddingsContext = request.app.embeddings
+
+    if context is None:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Could not process request. Try restarting Frigate.",
+            },
+            status_code=500,
+        )
+
+    matches = find_likely_journey_matches(
+        request.app.frigate_config,
+        context,
+        event_id,
+        hop_window_seconds=hop_window_seconds,
+        max_hops=max_hops,
+    )
+
+    if not matches:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "No confirmed journey matches to merge for this event.",
+            },
+            status_code=400,
+        )
+
+    match_ids = [m["event_id"] for m in matches]
+    matched_events = list(Event.select().where(Event.id.in_(match_ids)))
+    matched_events_by_id = {e.id: e for e in matched_events}
+    ordered_events = [event] + [
+        matched_events_by_id[mid] for mid in match_ids if mid in matched_events_by_id
+    ]
+
+    return StreamingResponse(
+        build_merged_journey_clip(request.app.frigate_config, ordered_events),
+        media_type="video/mp4",
     )
 
 

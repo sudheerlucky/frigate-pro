@@ -169,6 +169,21 @@ export default function JourneyView({
           </div>
         )}
 
+        {!loading && matchCount > 0 && (
+          <div className="flex flex-col gap-1">
+            <a
+              className="w-fit rounded-md bg-secondary px-3 py-1.5 text-xs text-primary hover:bg-muted"
+              href={`${baseUrl}api/events/${eventId}/journey/merged_clip.mp4`}
+              download={`journey-${eventId}.mp4`}
+            >
+              {t("journey.mergeClip")}
+            </a>
+            <div className="text-xs text-secondary-foreground">
+              {t("journey.mergeClipNote")}
+            </div>
+          </div>
+        )}
+
         {selectedEventId && (
           <video
             key={selectedEventId}
