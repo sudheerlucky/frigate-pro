@@ -79,6 +79,7 @@ from frigate.review.review import ReviewProcess
 from frigate.stats.emitter import StatsEmitter
 from frigate.stats.util import stats_init
 from frigate.storage import StorageMaintainer
+from frigate.util.immich_auto_identify import ImmichAutoIdentifyMaintainer
 from frigate.timeline import TimelineProcessor
 from frigate.track.object_processing import TrackedObjectProcessor
 from frigate.util.builtin import empty_and_close_queue
@@ -452,6 +453,12 @@ class FrigateApp:
         self.storage_maintainer = StorageMaintainer(self.config, self.stop_event)
         self.storage_maintainer.start()
 
+    def start_immich_auto_identify_maintainer(self) -> None:
+        self.immich_auto_identify_maintainer = ImmichAutoIdentifyMaintainer(
+            self.config, self.embeddings, self.stop_event
+        )
+        self.immich_auto_identify_maintainer.start()
+
     def start_stats_emitter(self) -> None:
         self.stats_emitter = StatsEmitter(
             self.config,
@@ -604,6 +611,7 @@ class FrigateApp:
         self.start_camera_processor()
         self.start_audio_processor()
         self.start_storage_maintainer()
+        self.start_immich_auto_identify_maintainer()
         self.start_stats_emitter()
         self.start_timeline_processor()
         self.start_event_processor()

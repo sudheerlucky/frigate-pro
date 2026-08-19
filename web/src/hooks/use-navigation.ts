@@ -75,6 +75,7 @@ export default function useNavigation(
           icon: TbRoute,
           title: "menu.journeys",
           url: "/journeys",
+          enabled: config?.journey?.show_in_nav ?? true,
         },
         {
           id: ID_PLAYGROUND,
@@ -109,6 +110,6 @@ export default function useNavigation(
           enabled: isDesktop && isAdmin && hasChatAgent,
         },
       ] as NavData[],
-    [config?.face_recognition?.enabled, hasChatAgent, variant, isAdmin],
+    [config?.face_recognition?.enabled, config?.journey?.show_in_nav, hasChatAgent, variant, isAdmin],
   );
 }

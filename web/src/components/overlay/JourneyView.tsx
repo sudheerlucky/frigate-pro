@@ -176,6 +176,7 @@ export default function JourneyView({
             controls
             autoPlay
             muted
+            playsInline
             src={`${baseUrl}api/events/${selectedEventId}/clip.mp4`}
           />
         )}

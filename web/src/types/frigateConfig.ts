@@ -30,6 +30,7 @@ export interface ImmichConfig {
   export_album_name: string;
   auto_identify_enabled: boolean;
   auto_identify_threshold: number;
+  auto_identify_interval_seconds: number;
 }
 
 export interface FaceRecognitionConfig {
@@ -528,7 +529,9 @@ export interface FrigateConfig {
   };
 
   journey: {
+    show_in_nav: boolean;
     min_appearance_confidence: number;
+    ambiguity_margin: number;
   };
 
   logger: {

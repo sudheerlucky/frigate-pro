@@ -81,6 +81,7 @@ const faceRecognition: SectionConfigOverrides = {
           "export_album_name",
           "auto_identify_enabled",
           "auto_identify_threshold",
+          "auto_identify_interval_seconds",
           "*",
         ],
       },

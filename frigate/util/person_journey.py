@@ -71,9 +71,17 @@ def _best_face_match(current: Event, candidates: list[Event]) -> Event | None:
 
 
 def _best_appearance_match(
-    current: Event, candidates: list[Event], min_confidence: float
+    current: Event,
+    candidates: list[Event],
+    min_confidence: float,
+    ambiguity_margin: float,
 ) -> tuple[Event, float] | None:
-    """Highest-similarity candidate above the confidence floor, or None."""
+    """Highest-similarity candidate above the confidence floor -- but only if
+    it's clearly the best one. If a second candidate scores within
+    ambiguity_margin of the top score, that's not a confident match, that's
+    two plausible people (e.g. a second person who happened to also be on
+    the target camera around the same time): refuse to guess and return
+    None rather than silently picking the higher of two close scores."""
     current_bytes = get_event_thumbnail_bytes(current)
     if current_bytes is None:
         return None
@@ -83,7 +91,7 @@ def _best_appearance_match(
     if current_embedding is None:
         return None
 
-    best: tuple[Event, float] | None = None
+    scored: list[tuple[Event, float]] = []
     for candidate in candidates:
         candidate_bytes = get_event_thumbnail_bytes(candidate)
         if candidate_bytes is None:
@@ -96,8 +104,23 @@ def _best_appearance_match(
         confidence = cosine_similarity(current_embedding, candidate_embedding)
         if confidence < min_confidence:
             continue
-        if best is None or confidence > best[1]:
-            best = (candidate, confidence)
+        scored.append((candidate, confidence))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    best = scored[0]
+
+    if len(scored) > 1:
+        runner_up = scored[1]
+        if best[1] - runner_up[1] < ambiguity_margin:
+            logger.info(
+                f"Journey: ambiguous hop from {current.id} -- top two candidates "
+                f"{best[0].id} ({best[1]:.3f}) and {runner_up[0].id} ({runner_up[1]:.3f}) "
+                f"are within {ambiguity_margin} of each other, refusing to guess"
+            )
+            return None
 
     return best
 
@@ -110,6 +133,7 @@ def find_likely_journey_matches(
     max_hops: int = DEFAULT_MAX_HOPS,
     max_total_span_seconds: int = DEFAULT_MAX_TOTAL_SPAN_SECONDS,
     min_appearance_confidence: float | None = None,
+    ambiguity_margin: float | None = None,
 ) -> list[dict]:
     """Chain-walk forward from `event_id` across cameras, one hop at a time.
     Returns the chain in chronological order as a list of
@@ -117,10 +141,18 @@ def find_likely_journey_matches(
     counts from 1 (the first link away from the source) and confidence is
     that hop's own match strength, not compounded across the chain.
 
-    min_appearance_confidence defaults to config.journey.min_appearance_confidence
-    (user-tunable in Settings) when not explicitly overridden."""
+    A hop stops the chain (rather than guessing) when the appearance model
+    can't clearly tell two candidates apart -- e.g. a second person who
+    happens to also be on the target camera around the same time. See
+    _best_appearance_match.
+
+    min_appearance_confidence and ambiguity_margin default to
+    config.journey.* (user-tunable in Settings) when not explicitly
+    overridden."""
     if min_appearance_confidence is None:
         min_appearance_confidence = config.journey.min_appearance_confidence
+    if ambiguity_margin is None:
+        ambiguity_margin = config.journey.ambiguity_margin
 
     source = Event.get_or_none(Event.id == event_id)
 
@@ -160,7 +192,7 @@ def find_likely_journey_matches(
             next_event, confidence, method = face_match, 0.99, "face"
         else:
             appearance_match = _best_appearance_match(
-                current, candidates, min_appearance_confidence
+                current, candidates, min_appearance_confidence, ambiguity_margin
             )
             if appearance_match is None:
                 break

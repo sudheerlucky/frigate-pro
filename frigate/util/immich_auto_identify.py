@@ -16,6 +16,8 @@ this integration.
 import logging
 import os
 import re
+import threading
+from multiprocessing.synchronize import Event as MpEvent
 
 import cv2
 import numpy as np
@@ -148,3 +150,61 @@ def run_auto_identify_pass(
         "people_available": len(person_cache),
         "matches": matches,
     }
+
+
+class ImmichAutoIdentifyMaintainer(threading.Thread):
+    """Runs run_auto_identify_pass on a timer in the background, so new
+    unknown faces get matched against Immich without waiting for someone to
+    click the manual button on the Face Library page. Mirrors the
+    threading.Thread + stop_event.wait(interval) pattern used by
+    frigate.storage.StorageMaintainer elsewhere in this codebase.
+
+    Fails open: any error during a scheduled pass (Immich unreachable,
+    misconfigured, a transient decode failure) is logged and the next
+    interval is tried again -- never crashes the app, and never touches the
+    live detection/recording path either way."""
+
+    def __init__(
+        self, config: FrigateConfig, context: EmbeddingsContext, stop_event: MpEvent
+    ) -> None:
+        super().__init__(name="immich_auto_identify", daemon=True)
+        self.config = config
+        self.context = context
+        self.stop_event = stop_event
+
+    def run(self) -> None:
+        immich_config = self.config.face_recognition.immich
+        interval = immich_config.auto_identify_interval_seconds
+
+        if interval <= 0:
+            logger.info(
+                "Immich auto-identify: background pass disabled "
+                "(auto_identify_interval_seconds <= 0)"
+            )
+            return
+
+        # give the rest of startup (embeddings client, etc.) time to settle
+        # before the first pass
+        if self.stop_event.wait(60):
+            return
+
+        while True:
+            immich_config = self.config.face_recognition.immich
+            if not immich_config.enabled or not immich_config.auto_identify_enabled:
+                logger.debug(
+                    "Immich auto-identify: skipping scheduled pass, not enabled"
+                )
+            else:
+                try:
+                    summary = run_auto_identify_pass(self.config, self.context)
+                    if summary["identified"] > 0:
+                        logger.info(f"Immich auto-identify (scheduled): {summary}")
+                    else:
+                        logger.debug(f"Immich auto-identify (scheduled): {summary}")
+                except Exception as e:
+                    logger.warning(f"Immich auto-identify (scheduled) pass failed: {e}")
+
+            if self.stop_event.wait(interval):
+                break
+
+        logger.info("Exiting Immich auto-identify maintainer...")

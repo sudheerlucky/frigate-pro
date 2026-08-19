@@ -309,6 +309,12 @@ class ImmichConfig(FrigateBaseModel):
         title="Auto-identify confidence threshold",
         description="Minimum match confidence required to auto-register an unknown face under an Immich person's name.",
     )
+    auto_identify_interval_seconds: int = Field(
+        default=900,
+        ge=0,
+        title="Auto-identify background interval (seconds)",
+        description="How often to automatically run the auto-identify pass in the background, in addition to the manual button on the Face Library page. Set to 0 to disable the background pass and only run it manually.",
+    )
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
@@ -522,19 +528,39 @@ class CameraAudioTranscriptionConfig(FrigateBaseModel):
 
 
 class PersonJourneyConfig(FrigateBaseModel):
+    show_in_nav: bool = Field(
+        default=True,
+        title="Show Journeys in navigation",
+        description="Show the Journeys nav item in the sidebar/bottom bar. Disable to hide it without disabling the underlying feature.",
+    )
     min_appearance_confidence: float = Field(
-        default=0.6,
+        default=0.45,
         title="Minimum appearance-match confidence",
         description=(
             "Cosine similarity threshold for the person re-identification model used by "
             "cross-camera Journey tracking (frigate/util/person_journey.py) when face "
             "recognition doesn't confirm identity. This is NOT a percentage the way face "
             "recognition's thresholds are -- OSNet re-ID embeddings for this model score "
-            "real same-person matches around 0.5-0.6 in practice, so setting this near 1.0 "
-            "will produce zero matches. Raise it if different people are being linked "
-            "together; lower it if real matches across cameras are being missed."
+            "real same-person matches around 0.5-0.6 in practice (confirmed as low as 0.51 "
+            "on real footage), so setting this above ~0.55 risks rejecting genuine matches, "
+            "and setting it near 1.0 will produce zero matches at all. This floor is "
+            "deliberately loose -- ambiguity_margin below is the primary defense against "
+            "linking two different people, since real and false matches occupy overlapping "
+            "score ranges here and a blanket threshold alone can't cleanly separate them."
         ),
         gt=0.0,
+        le=1.0,
+    )
+    ambiguity_margin: float = Field(
+        default=0.05,
+        title="Ambiguity margin",
+        description=(
+            "If the two best cross-camera candidates for a hop score within this margin "
+            "of each other, the match is treated as ambiguous (e.g. a second person who "
+            "happened to also be on the target camera around the same time) and the "
+            "journey chain stops there rather than guessing which one is right."
+        ),
+        ge=0.0,
         le=1.0,
     )
 
