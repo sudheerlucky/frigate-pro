@@ -9,6 +9,7 @@ import JourneyView from "@/components/overlay/JourneyView";
 type JourneySessionMatch = {
   event_id: string;
   camera: string;
+  same_camera?: boolean;
 };
 
 type JourneySession = {
@@ -96,7 +97,11 @@ export default function Journeys() {
                 </div>
                 {session.matches.length > 0 && (
                   <div className="truncate text-xs text-secondary-foreground">
-                    {t("journeysPage.crossedCameras", { count: cameraCount })}
+                    {cameraCount > 1
+                      ? t("journeysPage.crossedCameras", { count: cameraCount })
+                      : t("journeysPage.seenMultipleTimes", {
+                          count: session.matches.length + 1,
+                        })}
                   </div>
                 )}
               </div>

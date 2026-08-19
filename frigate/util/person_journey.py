@@ -30,9 +30,23 @@ Walks forward in time only. Clicking the first event of a trip sees the
 whole thing; clicking a middle event only sees what comes after it, not
 before. Backward-chaining would double the search per hop for a case
 that's rare in practice (most journeys get inspected from their start).
+
+Two different window lengths, not one fixed size for every hop. A
+cross-camera hop (the person leaves one camera's view and should appear
+on another) uses a short window scaled by how long the source event
+itself lasted -- a person who lingered is plausibly slower to reach the
+next camera too, so a brief glimpse and a long loiter don't get the same
+travel-time budget. A same-camera re-appearance (the person leaves frame
+and comes back to the SAME camera -- e.g. someone working in view who
+steps in and out repeatedly) uses a much longer, separately configured
+window, since "gone from view" on one camera says nothing about how long
+until they're back in that same view, unlike an actual cross-camera
+transit. Without this, a person who repeatedly re-enters one camera's
+frame over hours shows up as a new standalone session every single time.
 """
 
 import logging
+import time
 
 from frigate.config import FrigateConfig
 from frigate.embeddings import EmbeddingsContext
@@ -45,6 +59,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_HOP_WINDOW_SECONDS = 45
 DEFAULT_MAX_HOPS = 5
 DEFAULT_MAX_TOTAL_SPAN_SECONDS = 600  # 10 minutes -- stop chaining past this regardless of hop count
+DEFAULT_SAME_CAMERA_GAP_SECONDS = 1200  # 20 minutes -- a same-camera re-appearance is a continuation, not a new visit, even after a much longer gap than a cross-camera hop would tolerate
+DEFAULT_MAX_SAME_CAMERA_SESSION_SECONDS = 21600  # 6 hours -- a chain that has stayed on one camera the whole time (e.g. someone working in view for hours) is one long presence, not a "trip" -- the tight cross-camera trip cap below doesn't apply to it
+DEFAULT_MAX_SAME_CAMERA_HOPS = 50  # a same-camera presence can legitimately re-appear far more than a 5-hop cross-camera trip would
+MAX_HOP_WINDOW_SECONDS = 180  # ceiling on the duration-scaled cross-camera window, even for a long-lingering source event
+HOP_WINDOW_DURATION_FACTOR = 0.5  # cross-camera window grows by this fraction of the source event's own duration
 
 _reid_embedder: PersonReidEmbedding | None = None
 
@@ -66,7 +85,8 @@ def _best_face_match(current: Event, candidates: list[Event]) -> Event | None:
     if not named:
         return None
 
-    named.sort(key=lambda c: abs(c.start_time - current.end_time))
+    current_end_time = current.end_time if current.end_time is not None else time.time()
+    named.sort(key=lambda c: abs(c.start_time - current_end_time))
     return named[0]
 
 
@@ -134,6 +154,7 @@ def find_likely_journey_matches(
     max_total_span_seconds: int = DEFAULT_MAX_TOTAL_SPAN_SECONDS,
     min_appearance_confidence: float | None = None,
     ambiguity_margin: float | None = None,
+    same_camera_gap_seconds: int = DEFAULT_SAME_CAMERA_GAP_SECONDS,
 ) -> list[dict]:
     """Chain-walk forward from `event_id` across cameras, one hop at a time.
     Returns the chain in chronological order as a list of
@@ -162,28 +183,76 @@ def find_likely_journey_matches(
     chain: list[dict] = []
     visited_ids = {source.id}
     current = source
+    all_same_camera_so_far = True
 
-    for hop_number in range(1, max_hops + 1):
-        if current.end_time - source.start_time > max_total_span_seconds:
+    # Loop bound is the larger (same-camera) cap; the tighter cross-camera
+    # max_hops is enforced inside the loop once/if a hop actually crosses
+    # cameras, same reasoning as the span cap below.
+    for hop_number in range(1, DEFAULT_MAX_SAME_CAMERA_HOPS + 1):
+        hop_cap = DEFAULT_MAX_SAME_CAMERA_HOPS if all_same_camera_so_far else max_hops
+        if hop_number > hop_cap:
             break
 
+        # A chain that hasn't left its starting camera yet is one ongoing
+        # presence (see module docstring), so it gets the long same-camera
+        # cap instead of the tight cross-camera trip cap. The moment a hop
+        # actually crosses cameras, this chain is a trip and the tight cap
+        # applies from then on.
+        # current.end_time is None while the event is still in progress
+        # (the person is still on screen) -- treat "now" as its effective
+        # end for all the window/span math below rather than crashing.
+        effective_end_time = (
+            current.end_time if current.end_time is not None else time.time()
+        )
+
+        span_cap = (
+            DEFAULT_MAX_SAME_CAMERA_SESSION_SECONDS
+            if all_same_camera_so_far
+            else max_total_span_seconds
+        )
+        if effective_end_time - source.start_time > span_cap:
+            break
+
+        # Cross-camera window scales with how long the source event itself
+        # lasted, capped so a very long loiter doesn't blow the window out
+        # indefinitely.
+        current_duration = effective_end_time - current.start_time
+        adaptive_hop_window = min(
+            max(hop_window_seconds, current_duration * HOP_WINDOW_DURATION_FACTOR),
+            MAX_HOP_WINDOW_SECONDS,
+        )
+
         # Bounded below by current.start_time, not just
-        # current.end_time - hop_window_seconds: for a short event, that
+        # effective_end_time - adaptive_hop_window: for a short event, that
         # subtraction can land before the event's own start, which let a
         # candidate that started BEFORE current even began get matched as
         # if it were a forward hop. This is meant to walk forward only
         # (see module docstring) -- a match earlier than current's own
         # start is never legitimate here.
-        window_start = max(current.start_time, current.end_time - hop_window_seconds)
-        window_end = current.end_time + hop_window_seconds
+        cross_camera_start = max(current.start_time, effective_end_time - adaptive_hop_window)
+        cross_camera_end = effective_end_time + adaptive_hop_window
+
+        # Same-camera re-appearances only look forward from current's own
+        # end -- an event starting inside current's own span isn't a
+        # "return", it would overlap current itself.
+        same_camera_end = effective_end_time + same_camera_gap_seconds
 
         candidates = list(
             Event.select().where(
-                (Event.camera != current.camera)
-                & (Event.label == "person")
-                & (Event.start_time >= window_start)
-                & (Event.start_time <= window_end)
+                (Event.label == "person")
                 & (Event.id.not_in(visited_ids))
+                & (
+                    (
+                        (Event.camera != current.camera)
+                        & (Event.start_time >= cross_camera_start)
+                        & (Event.start_time <= cross_camera_end)
+                    )
+                    | (
+                        (Event.camera == current.camera)
+                        & (Event.start_time >= effective_end_time)
+                        & (Event.start_time <= same_camera_end)
+                    )
+                )
             )
         )
 
@@ -218,9 +287,12 @@ def find_likely_journey_matches(
                 "start_time": next_event.start_time,
                 "end_time": next_event.end_time,
                 "hop": hop_number,
+                "same_camera": next_event.camera == current.camera,
             }
         )
         visited_ids.add(next_event.id)
+        if next_event.camera != current.camera:
+            all_same_camera_so_far = False
         current = next_event
 
     return chain
@@ -236,6 +308,7 @@ def find_recent_journey_sessions(
     hop_window_seconds: int = DEFAULT_HOP_WINDOW_SECONDS,
     max_hops: int = DEFAULT_MAX_HOPS,
     max_total_span_seconds: int = DEFAULT_MAX_TOTAL_SPAN_SECONDS,
+    same_camera_gap_seconds: int | None = None,
 ) -> list[dict]:
     """One entry per continuous cross-camera walk among the most recent
     `limit` person events, instead of one entry per raw event. Without
@@ -253,6 +326,9 @@ def find_recent_journey_sessions(
     Returns sessions newest-first, each shaped like a single
     find_likely_journey_matches call's result plus the head event's own
     identity: {event_id, camera, start_time, end_time, matches}."""
+    if same_camera_gap_seconds is None:
+        same_camera_gap_seconds = config.journey.same_camera_gap_seconds
+
     # Take the most recent `limit` events (descending), then walk them
     # oldest-first so a chain always processes before the events it
     # consumes -- selecting ascending+limit here would instead grab the
@@ -279,6 +355,7 @@ def find_recent_journey_sessions(
             hop_window_seconds=hop_window_seconds,
             max_hops=max_hops,
             max_total_span_seconds=max_total_span_seconds,
+            same_camera_gap_seconds=same_camera_gap_seconds,
         )
         consumed_ids.update(match["event_id"] for match in chain)
 

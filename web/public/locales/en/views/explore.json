@@ -6,7 +6,7 @@
     "title": "Explore is Unavailable",
     "embeddingsReindexing": {
       "context": "Explore can be used after tracked object embeddings have finished reindexing.",
-      "startingUp": "Starting up…",
+      "startingUp": "Starting up\u2026",
       "estimatedTime": "Estimated time remaining:",
       "finishingShortly": "Finishing shortly",
       "step": {
@@ -284,6 +284,7 @@
     "loading": "Loading recent activity...",
     "empty": "No recent person activity found.",
     "unknownPerson": "Unknown person",
-    "crossedCameras": "Crossed {{count}} cameras"
+    "crossedCameras": "Crossed {{count}} cameras",
+    "seenMultipleTimes": "Seen {{count}} times"
   }
 }

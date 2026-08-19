@@ -576,5 +576,18 @@ class PersonJourneyConfig(FrigateBaseModel):
         ge=0.0,
         le=1.0,
     )
+    same_camera_gap_seconds: int = Field(
+        default=1200,
+        title="Same-camera re-appearance window (seconds)",
+        description=(
+            "How long a person can be gone from a camera's view and still have their "
+            "next appearance on that SAME camera treated as a continuation of the same "
+            "visit rather than a new one (e.g. someone working in view who repeatedly "
+            "steps in and out of frame). Deliberately much longer than a cross-camera "
+            "hop window, since a gap on one camera says nothing about travel time to a "
+            "different camera."
+        ),
+        ge=0,
+    )
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
