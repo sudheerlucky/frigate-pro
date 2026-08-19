@@ -209,6 +209,7 @@ def find_likely_journey_matches(
                 "confidence": round(confidence, 3),
                 "method": method,
                 "start_time": next_event.start_time,
+                "end_time": next_event.end_time,
                 "hop": hop_number,
             }
         )

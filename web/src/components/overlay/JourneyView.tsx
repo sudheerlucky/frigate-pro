@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { baseUrl } from "@/api/baseUrl";
 import { cn } from "@/lib/utils";
 import { formatUnixTimestampToDateTime } from "@/utils/dateUtil";
+import { GenericVideoPlayer } from "../player/GenericVideoPlayer";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,7 @@ type JourneyMatch = {
   confidence: number;
   method: "face" | "appearance";
   start_time: number;
+  end_time: number | null;
   hop: number;
 };
 
@@ -25,6 +27,7 @@ type JourneyResponse = {
   success: boolean;
   event_id: string;
   start_time: number;
+  end_time: number | null;
   matches: JourneyMatch[];
 };
 
@@ -32,6 +35,7 @@ type JourneyTimelineItem = {
   eventId: string;
   camera?: string;
   startTime: number;
+  endTime: number | null;
   match?: JourneyMatch;
   isSource: boolean;
 };
@@ -70,6 +74,7 @@ export default function JourneyView({
           eventId: resp.data.event_id,
           camera: sourceCamera,
           startTime: resp.data.start_time,
+          endTime: resp.data.end_time,
           isSource: true,
         };
         const matched: JourneyTimelineItem[] = (resp.data.matches ?? []).map(
@@ -77,6 +82,7 @@ export default function JourneyView({
             eventId: m.event_id,
             camera: m.camera,
             startTime: m.start_time,
+            endTime: m.end_time,
             match: m,
             isSource: false,
           }),
@@ -91,6 +97,23 @@ export default function JourneyView({
   const selectEvent = useCallback((id: string) => {
     setSelectedEventId(id);
   }, []);
+
+  // iOS Safari does not reliably play progressive mp4 -- use the same HLS
+  // VOD URL pattern (hls.js under the hood via GenericVideoPlayer) that
+  // SearchDetailDialog's VideoTab already uses successfully for recorded
+  // clips, instead of a raw <video src=".../clip.mp4"> tag. Note: no "api/"
+  // prefix -- /vod/ is handled directly by nginx-vod-module, not proxied
+  // through the same path as the rest of the JSON API.
+  const selectedItem = timeline.find(
+    (item) => item.eventId === selectedEventId,
+  );
+  const vodSource = useMemo(() => {
+    if (!selectedItem || !selectedItem.camera) {
+      return null;
+    }
+    const endTime = selectedItem.endTime ?? Date.now() / 1000;
+    return `${baseUrl}vod/${selectedItem.camera}/start/${selectedItem.startTime}/end/${endTime}/index.m3u8`;
+  }, [selectedItem]);
 
   if (!eventId) {
     return null;
@@ -184,16 +207,10 @@ export default function JourneyView({
           </div>
         )}
 
-        {selectedEventId && (
-          <video
-            key={selectedEventId}
-            className="aspect-video w-full rounded-lg bg-black"
-            controls
-            autoPlay
-            muted
-            playsInline
-            src={`${baseUrl}api/events/${selectedEventId}/clip.mp4`}
-          />
+        {vodSource && (
+          <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
+            <GenericVideoPlayer key={selectedEventId} source={vodSource} />
+          </div>
         )}
       </DialogContent>
     </Dialog>

@@ -1063,6 +1063,7 @@ async def event_likely_journey(
             "success": True,
             "event_id": event_id,
             "start_time": event.start_time,
+            "end_time": event.end_time,
             "matches": matches,
         },
         status_code=200,
