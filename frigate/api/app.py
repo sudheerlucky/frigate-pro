@@ -162,6 +162,77 @@ def stats_history(request: Request, keys: str = None):
     return JSONResponse(content=request.app.stats_emitter.get_stats_history(keys))
 
 
+@router.get(
+    "/selfcheck",
+    dependencies=[Depends(require_role(["admin"]))],
+    summary="Quick health check across cameras, disk space, and Immich",
+    description="""Runs a handful of cheap checks that don't require digging through logs or
+    stats by hand: is every enabled camera actually processing frames right now, is there enough
+    free disk space on the media volume, and (if configured) is Immich reachable. Meant as a fast
+    "is anything obviously broken" check, not a replacement for the full /stats endpoint.""",
+)
+def selfcheck(request: Request):
+    import shutil
+
+    from frigate.const import BASE_DIR
+
+    config = request.app.frigate_config
+    checks = []
+    healthy = True
+
+    stats_data = request.app.stats_emitter.get_latest_stats()
+    camera_stats = stats_data.get("cameras", {})
+    for name, camera in config.cameras.items():
+        if not camera.enabled_in_config:
+            continue
+        process_fps = camera_stats.get(name, {}).get("process_fps", 0)
+        ok = process_fps > 0
+        healthy = healthy and ok
+        checks.append(
+            {
+                "name": f"camera:{name}",
+                "ok": ok,
+                "detail": f"process_fps={process_fps}",
+            }
+        )
+
+    try:
+        usage = shutil.disk_usage(BASE_DIR)
+        free_percent = round(100 * usage.free / usage.total, 1)
+        # below 10% free is the same threshold Frigate's own storage
+        # maintainer treats as needing cleanup
+        ok = free_percent >= 10
+        healthy = healthy and ok
+        checks.append(
+            {
+                "name": "disk_space",
+                "ok": ok,
+                "detail": f"{free_percent}% free on {BASE_DIR}",
+            }
+        )
+    except OSError as e:
+        healthy = False
+        checks.append({"name": "disk_space", "ok": False, "detail": str(e)})
+
+    immich_config = config.face_recognition.immich
+    if immich_config.enabled and immich_config.host and immich_config.api_key:
+        import requests
+
+        try:
+            resp = requests.get(
+                f"{immich_config.host}/api/server/ping",
+                headers={"x-api-key": immich_config.api_key},
+                timeout=5,
+            )
+            resp.raise_for_status()
+            checks.append({"name": "immich", "ok": True, "detail": "reachable"})
+        except Exception as e:
+            healthy = False
+            checks.append({"name": "immich", "ok": False, "detail": str(e)})
+
+    return JSONResponse(content={"healthy": healthy, "checks": checks})
+
+
 @router.get("/metrics", dependencies=[Depends(allow_any_authenticated())])
 def metrics(request: Request):
     """Expose Prometheus metrics endpoint and update metrics with latest stats"""
