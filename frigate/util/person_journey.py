@@ -167,7 +167,14 @@ def find_likely_journey_matches(
         if current.end_time - source.start_time > max_total_span_seconds:
             break
 
-        window_start = current.end_time - hop_window_seconds
+        # Bounded below by current.start_time, not just
+        # current.end_time - hop_window_seconds: for a short event, that
+        # subtraction can land before the event's own start, which let a
+        # candidate that started BEFORE current even began get matched as
+        # if it were a forward hop. This is meant to walk forward only
+        # (see module docstring) -- a match earlier than current's own
+        # start is never legitimate here.
+        window_start = max(current.start_time, current.end_time - hop_window_seconds)
         window_end = current.end_time + hop_window_seconds
 
         candidates = list(
