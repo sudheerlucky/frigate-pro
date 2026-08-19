@@ -844,6 +844,7 @@ def events_search(
                 "path_data",
                 "recognized_license_plate",
                 "recognized_license_plate_score",
+                "current_activity",
             ]
         }
 
@@ -1076,6 +1077,7 @@ async def event_likely_journey(
             "event_id": event_id,
             "start_time": event.start_time,
             "end_time": event.end_time,
+            "current_activity": event.data.get("current_activity"),
             "matches": matches,
         },
         status_code=200,

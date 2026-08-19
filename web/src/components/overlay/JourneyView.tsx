@@ -21,6 +21,7 @@ type JourneyMatch = {
   start_time: number;
   end_time: number | null;
   hop: number;
+  current_activity?: string | null;
 };
 
 type JourneyResponse = {
@@ -28,6 +29,7 @@ type JourneyResponse = {
   event_id: string;
   start_time: number;
   end_time: number | null;
+  current_activity?: string | null;
   matches: JourneyMatch[];
 };
 
@@ -38,6 +40,7 @@ type JourneyTimelineItem = {
   endTime: number | null;
   match?: JourneyMatch;
   isSource: boolean;
+  activity?: string | null;
 };
 
 type JourneyViewProps = {
@@ -76,6 +79,7 @@ export default function JourneyView({
           startTime: resp.data.start_time,
           endTime: resp.data.end_time,
           isSource: true,
+          activity: resp.data.current_activity,
         };
         const matched: JourneyTimelineItem[] = (resp.data.matches ?? []).map(
           (m) => ({
@@ -85,6 +89,7 @@ export default function JourneyView({
             endTime: m.end_time,
             match: m,
             isSource: false,
+            activity: m.current_activity,
           }),
         );
         setTimeline(
@@ -175,6 +180,11 @@ export default function JourneyView({
                           ),
                         })}
                 </div>
+                {item.activity && (
+                  <div className="rounded bg-secondary px-1.5 py-0.5 text-[10px] capitalize text-secondary-foreground">
+                    {item.activity}
+                  </div>
+                )}
               </button>
             </div>
           ))}

@@ -251,6 +251,7 @@ class EventProcessor(threading.Thread):
                     "type": "object",
                     "max_severity": event_data.get("max_severity"),
                     "path_data": event_data.get("path_data"),
+                    "current_activity": event_data.get("current_activity"),
                 },
             }
 

@@ -288,6 +288,7 @@ def find_likely_journey_matches(
                 "end_time": next_event.end_time,
                 "hop": hop_number,
                 "same_camera": next_event.camera == current.camera,
+                "current_activity": next_event.data.get("current_activity"),
             }
         )
         visited_ids.add(next_event.id)
@@ -366,6 +367,7 @@ def find_recent_journey_sessions(
                 "start_time": event.start_time,
                 "end_time": event.end_time,
                 "sub_label": event.sub_label,
+                "current_activity": event.data.get("current_activity"),
                 "matches": chain,
             }
         )
