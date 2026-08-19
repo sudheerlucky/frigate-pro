@@ -268,10 +268,11 @@
   },
   "journey": {
     "title": "Journey",
-    "desc": "Other cameras this person likely appeared on around the same time. Face matches are confirmed identity; other matches are a visual-similarity estimate, not a guarantee.",
+    "desc": "Traces where this person likely went next, camera to camera. Face matches are confirmed identity; other matches are a visual-similarity estimate, not a guarantee -- and each hop's confidence is its own, not compounded across the chain.",
     "source": "Source",
     "confirmed": "Confirmed",
     "likelyMatch": "Likely match ({{confidence}}%)",
+    "hop": "hop {{number}}",
     "loading": "Looking for matches on other cameras...",
     "noMatches": "No likely matches found on other cameras."
   }

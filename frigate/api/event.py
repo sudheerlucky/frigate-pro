@@ -1012,17 +1012,23 @@ async def event(event_id: str, request: Request):
 @router.get(
     "/events/{event_id}/likely_journey",
     dependencies=[Depends(allow_any_authenticated())],
-    summary="Find likely cross-camera matches for a person event",
-    description="""Looks for the same person appearing on other cameras shortly before or
-    after this event, to link them into a single cross-camera journey. Uses face recognition
-    as the primary signal (an exact identity match, if this event already has a recognized
-    sub_label); falls back to visual-similarity matching using Frigate's existing thumbnail
-    embeddings when face recognition doesn't produce a name. The fallback is a general-purpose
-    appearance heuristic, not a dedicated person re-identification model, so its matches are
-    reported with a confidence score, never as confirmed identity.""",
+    summary="Chain-walk likely cross-camera matches for a person event",
+    description="""Walks forward hop-by-hop from this event across cameras to link them into a
+    single cross-camera journey: from this event, finds the single best other-camera match
+    within a short per-hop window, then repeats from that match, and so on, up to max_hops or
+    max_total_span_seconds. Uses face recognition as the primary signal per hop (an exact
+    identity match, if the current event already has a recognized sub_label); falls back to a
+    dedicated person re-identification model when face recognition doesn't produce a name. The
+    fallback is a probabilistic appearance heuristic, not confirmed identity, so its matches are
+    always reported with a confidence score -- and that score is relative to the immediate
+    previous hop, not compounded across the whole chain.""",
 )
 async def event_likely_journey(
-    event_id: str, request: Request, window_seconds: int = 90
+    event_id: str,
+    request: Request,
+    hop_window_seconds: int = 45,
+    max_hops: int = 5,
+    max_total_span_seconds: int = 600,
 ):
     try:
         event = Event.get(Event.id == event_id)
@@ -1044,7 +1050,12 @@ async def event_likely_journey(
         )
 
     matches = find_likely_journey_matches(
-        request.app.frigate_config, context, event_id, window_seconds
+        request.app.frigate_config,
+        context,
+        event_id,
+        hop_window_seconds=hop_window_seconds,
+        max_hops=max_hops,
+        max_total_span_seconds=max_total_span_seconds,
     )
 
     return JSONResponse(

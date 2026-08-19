@@ -18,6 +18,7 @@ type JourneyMatch = {
   confidence: number;
   method: "face" | "appearance";
   start_time: number;
+  hop: number;
 };
 
 type JourneyResponse = {
@@ -63,9 +64,7 @@ export default function JourneyView({
     setLoading(true);
 
     axios
-      .get<JourneyResponse>(`events/${eventId}/likely_journey`, {
-        params: { window_seconds: 90 },
-      })
+      .get<JourneyResponse>(`events/${eventId}/likely_journey`)
       .then((resp) => {
         const source: JourneyTimelineItem = {
           eventId: resp.data.event_id,
@@ -111,7 +110,14 @@ export default function JourneyView({
           {timeline.map((item, index) => (
             <div key={item.eventId} className="flex shrink-0 items-center">
               {index > 0 && (
-                <div className="h-px w-6 shrink-0 self-center bg-secondary sm:w-10" />
+                <div className="flex shrink-0 flex-col items-center gap-0.5 self-center">
+                  {item.match?.hop !== undefined && (
+                    <div className="whitespace-nowrap font-mono text-[9px] text-secondary-foreground">
+                      {t("journey.hop", { number: item.match.hop })}
+                    </div>
+                  )}
+                  <div className="h-px w-6 bg-secondary sm:w-10" />
+                </div>
               )}
               <button
                 className={cn(
