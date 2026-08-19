@@ -26,6 +26,7 @@ from frigate.util.image import (
 )
 from frigate.util.object import box_inside
 from frigate.util.velocity import calculate_real_world_speed
+from frigate.util.activity import classify_activity
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,8 @@ class TrackedObject:
         self.average_estimated_speed: float = 0
         self.velocity_angle = 0
         self.path_data: list[tuple[Any, float]] = []
+        self.activity_history: list[str] = []
+        self.current_activity: str | None = None
         self.previous = self.to_dict()
 
     @property
@@ -377,6 +380,36 @@ class TrackedObject:
                         f"Point tracking: {obj_data['id']}, {bottom_center}, {obj_data['frame_time']}"
                     )
 
+        # activity classification is person-only and independent of face
+        # recognition -- it only reads the box's own motion/shape, so it
+        # runs the same whether or not this person has ever been identified
+        if (
+            obj_data["label"] == "person"
+            and obj_data["frame_time"] == current_frame_time
+            and obj_data.get("estimate_velocity") is not None
+        ):
+            box = obj_data["box"]
+            box_height = max(box[3] - box[1], 1)
+            box_width = max(box[2] - box[0], 1)
+            velocity = obj_data["estimate_velocity"]
+            vx = float((velocity[0][0] + velocity[1][0]) / 2)
+            vy = float((velocity[0][1] + velocity[1][1]) / 2)
+            px_per_sec = math.hypot(vx, vy) * self.camera_config.detect.fps
+            normalized_speed = px_per_sec / box_height
+            aspect_ratio = box_width / box_height
+
+            self.activity_history.append(
+                classify_activity(normalized_speed, aspect_ratio)
+            )
+            if len(self.activity_history) > 10:
+                self.activity_history = self.activity_history[-10:]
+
+            # majority vote over the recent window so a single jittery
+            # frame can't flip the label
+            self.current_activity = max(
+                set(self.activity_history), key=self.activity_history.count
+            )
+
         self.obj_data.update(obj_data)
         self.current_zones = current_zones
         logger.debug(
@@ -427,6 +460,7 @@ class TrackedObject:
             "velocity_angle": self.velocity_angle,
             "path_data": self.path_data.copy(),
             "recognized_license_plate": self.obj_data.get("recognized_license_plate"),
+            "current_activity": self.current_activity,
         }
 
         # Add any other obj_data keys (e.g. custom attribute fields) not yet included
