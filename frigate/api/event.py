@@ -854,7 +854,19 @@ def events_search(
         processed_events.append(processed_event)
 
     if (sort is None or sort == "relevance") and search_results:
-        processed_events.sort(key=lambda x: x.get("search_distance", float("inf")))
+        # x.get(..., float("inf")) only falls back when the key is missing --
+        # but search_distance can be present and still None (e.g. a search
+        # source that doesn't produce a distance score), which crashed this
+        # sort with "'<' not supported between instances of 'NoneType' and
+        # 'NoneType'". Explicit None check instead of relying on the dict
+        # default.
+        processed_events.sort(
+            key=lambda x: (
+                x["search_distance"]
+                if x.get("search_distance") is not None
+                else float("inf")
+            )
+        )
     elif sort == "score_asc":
         processed_events.sort(key=lambda x: x["data"]["score"])
     elif sort == "score_desc":
