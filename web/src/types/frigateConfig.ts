@@ -527,6 +527,10 @@ export interface FrigateConfig {
     enabled: boolean;
   };
 
+  journey: {
+    min_appearance_confidence: number;
+  };
+
   logger: {
     default: string;
     logs: Record<string, string>;

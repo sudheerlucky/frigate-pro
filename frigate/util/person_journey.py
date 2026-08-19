@@ -45,7 +45,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_HOP_WINDOW_SECONDS = 45
 DEFAULT_MAX_HOPS = 5
 DEFAULT_MAX_TOTAL_SPAN_SECONDS = 600  # 10 minutes -- stop chaining past this regardless of hop count
-DEFAULT_MIN_APPEARANCE_CONFIDENCE = 0.5  # cosine similarity; higher = more similar
 
 _reid_embedder: PersonReidEmbedding | None = None
 
@@ -110,13 +109,19 @@ def find_likely_journey_matches(
     hop_window_seconds: int = DEFAULT_HOP_WINDOW_SECONDS,
     max_hops: int = DEFAULT_MAX_HOPS,
     max_total_span_seconds: int = DEFAULT_MAX_TOTAL_SPAN_SECONDS,
-    min_appearance_confidence: float = DEFAULT_MIN_APPEARANCE_CONFIDENCE,
+    min_appearance_confidence: float | None = None,
 ) -> list[dict]:
     """Chain-walk forward from `event_id` across cameras, one hop at a time.
     Returns the chain in chronological order as a list of
     {event_id, camera, confidence, method, start_time, hop}, where hop
     counts from 1 (the first link away from the source) and confidence is
-    that hop's own match strength, not compounded across the chain."""
+    that hop's own match strength, not compounded across the chain.
+
+    min_appearance_confidence defaults to config.journey.min_appearance_confidence
+    (user-tunable in Settings) when not explicitly overridden."""
+    if min_appearance_confidence is None:
+        min_appearance_confidence = config.journey.min_appearance_confidence
+
     source = Event.get_or_none(Event.id == event_id)
 
     if source is None or source.label != "person":

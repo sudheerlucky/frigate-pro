@@ -61,6 +61,7 @@ from .classification import (
     LicensePlateRecognitionConfig,
     SemanticSearchConfig,
     SemanticSearchModelEnum,
+    PersonJourneyConfig,
 )
 from .database import DatabaseConfig
 from .env import EnvVars
@@ -599,6 +600,11 @@ class FrigateConfig(FrigateBaseModel):
         default_factory=LicensePlateRecognitionConfig,
         title="License Plate Recognition",
         description="License plate recognition settings including detection thresholds, formatting, and known plates.",
+    )
+    journey: PersonJourneyConfig = Field(
+        default_factory=PersonJourneyConfig,
+        title="Cross-camera person journey",
+        description="Settings for the cross-camera Journey feature that links a person's appearances across cameras.",
     )
 
     camera_groups: dict[str, CameraGroupConfig] = Field(

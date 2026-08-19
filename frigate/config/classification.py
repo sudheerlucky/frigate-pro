@@ -519,3 +519,23 @@ class CameraAudioTranscriptionConfig(FrigateBaseModel):
     )
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+
+class PersonJourneyConfig(FrigateBaseModel):
+    min_appearance_confidence: float = Field(
+        default=0.6,
+        title="Minimum appearance-match confidence",
+        description=(
+            "Cosine similarity threshold for the person re-identification model used by "
+            "cross-camera Journey tracking (frigate/util/person_journey.py) when face "
+            "recognition doesn't confirm identity. This is NOT a percentage the way face "
+            "recognition's thresholds are -- OSNet re-ID embeddings for this model score "
+            "real same-person matches around 0.5-0.6 in practice, so setting this near 1.0 "
+            "will produce zero matches. Raise it if different people are being linked "
+            "together; lower it if real matches across cameras are being missed."
+        ),
+        gt=0.0,
+        le=1.0,
+    )
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())

@@ -20,6 +20,7 @@ const Live = lazy(() => import("@/pages/Live"));
 const Events = lazy(() => import("@/pages/Events"));
 const Explore = lazy(() => import("@/pages/Explore"));
 const Exports = lazy(() => import("@/pages/Exports"));
+const Journeys = lazy(() => import("@/pages/Journeys"));
 const ConfigEditor = lazy(() => import("@/pages/ConfigEditor"));
 const System = lazy(() => import("@/pages/System"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -95,6 +96,7 @@ function DefaultAppView() {
               <Route path="/review" element={<Events />} />
               <Route path="/explore" element={<Explore />} />
               <Route path="/export" element={<Exports />} />
+              <Route path="/journeys" element={<Journeys />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route element={<ProtectedRoute requiredRoles={["admin"]} />}>

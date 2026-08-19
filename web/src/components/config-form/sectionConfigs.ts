@@ -39,6 +39,7 @@ import notifications from "./section-configs/notifications";
 import objects from "./section-configs/objects";
 import onvif from "./section-configs/onvif";
 import tapo from "./section-configs/tapo";
+import journey from "./section-configs/journey";
 import proxy from "./section-configs/proxy";
 import record from "./section-configs/record";
 import review from "./section-configs/review";
@@ -62,6 +63,7 @@ export const sectionConfigs: Record<string, SectionConfigOverrides> = {
   notifications,
   onvif,
   tapo,
+  journey,
   ffmpeg,
   audio_transcription: audioTranscription,
   birdseye,
