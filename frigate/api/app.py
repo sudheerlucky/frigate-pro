@@ -311,6 +311,11 @@ def config(request: Request):
         if isinstance(genai_cfg, dict):
             redact_credential(genai_cfg, "api_key")
 
+    # redact immich api key
+    immich_dict = config.get("face_recognition", {}).get("immich", {})
+    if immich_dict:
+        redact_credential(immich_dict, "api_key")
+
     for camera_name, camera in request.app.frigate_config.cameras.items():
         camera_dict = config["cameras"][camera_name]
 
@@ -318,6 +323,11 @@ def config(request: Request):
         onvif_dict = camera_dict.get("onvif", {})
         if onvif_dict:
             redact_credential(onvif_dict, "password")
+
+        # redact tapo credentials
+        tapo_dict = camera_dict.get("tapo", {})
+        if tapo_dict:
+            redact_credential(tapo_dict, "password")
 
         # clean paths
         for input in camera_dict.get("ffmpeg", {}).get("inputs", []):
