@@ -167,7 +167,8 @@
     "snapshots": "Snapshots",
     "audioDetection": "Audio Detection",
     "transcription": "Audio Transcription",
-    "autotracking": "Autotracking"
+    "autotracking": "Autotracking",
+    "tapoNightVision": "Night Vision (IR)"
   },
   "history": {
     "label": "Show historical footage"

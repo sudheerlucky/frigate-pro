@@ -1155,7 +1155,11 @@ function FrigateCameraFeatures({
             )}
             {camera.tapo?.enabled && (
               <CameraFeatureToggle
-                className="p-2 md:p-0"
+                className={cn(
+                  "p-2 md:p-0",
+                  tapoNightVisionState == "ON" &&
+                    "bg-amber-500 text-white hover:bg-amber-600",
+                )}
                 variant={fullscreen ? "overlay" : "primary"}
                 Icon={
                   tapoNightVisionState == "ON"
@@ -1582,6 +1586,17 @@ function FrigateCameraFeatures({
                     isChecked={autotrackingState == "ON"}
                     onCheckedChange={() =>
                       sendAutotracking(autotrackingState == "ON" ? "OFF" : "ON")
+                    }
+                  />
+                )}
+                {camera.tapo?.enabled && (
+                  <FilterSwitch
+                    label={t("cameraSettings.tapoNightVision")}
+                    isChecked={tapoNightVisionState == "ON"}
+                    onCheckedChange={() =>
+                      sendTapoNightVision(
+                        tapoNightVisionState == "ON" ? "OFF" : "ON",
+                      )
                     }
                   />
                 )}
