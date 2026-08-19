@@ -407,6 +407,7 @@ class ExportJobManager:
                 job.camera,
                 job.name,
                 immich_config.export_album_name,
+                job.id,
             )
             if job.results is not None:
                 job.results["immich_asset_id"] = asset_id

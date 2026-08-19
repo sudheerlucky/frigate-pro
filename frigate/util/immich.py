@@ -10,7 +10,6 @@ multi-person photo.
 import datetime
 import json
 import logging
-import uuid
 from pathlib import Path
 
 import cv2
@@ -238,14 +237,24 @@ def upload_video_export(
     camera: str,
     label: str | None,
     album_name: str,
+    job_id: str,
 ) -> str:
     """Upload an exported clip to Immich, named like HomeKit Secure Video
     exports (date + time first), and add it to the given album (created if
-    missing). Returns the Immich asset id."""
+    missing). Returns the Immich asset id.
+
+    device_asset_id is derived from the export job's own id rather than a
+    fresh random uuid4 per call. Immich's /api/assets upload is designed to
+    be idempotent on (deviceId, deviceAssetId): re-uploading the same pair
+    returns the existing asset instead of creating a duplicate. A random id
+    per call defeated that entirely -- if this job ever got reprocessed
+    (e.g. the export job was mid-upload during a container restart), it
+    would silently create a second copy of the same clip in Immich every
+    time. A stable id keyed to the job makes a re-run a no-op instead."""
     path = Path(video_path)
     filename = _export_filename(export_time, camera, label)
     iso_time = datetime.datetime.fromtimestamp(export_time).isoformat() + "Z"
-    device_asset_id = str(uuid.uuid4())
+    device_asset_id = f"frigate-pro-export-{job_id}"
 
     with open(path, "rb") as f:
         resp = requests.post(
