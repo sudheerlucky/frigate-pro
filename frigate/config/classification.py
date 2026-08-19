@@ -374,6 +374,19 @@ class FaceRecognitionConfig(FrigateBaseModel):
         title="Blur confidence filter",
         description="Adjust confidence scores based on image blur to reduce false positives for poor quality faces.",
     )
+    max_profile_ratio: float = Field(
+        default=2.2,
+        ge=1.0,
+        title="Max profile ratio for auto-identify",
+        description=(
+            "Rejects a crop from Immich auto-identify matching if it looks like a "
+            "side-profile face rather than one looking roughly at the camera (straight "
+            "on or a moderate tilt is fine). Measured as the ratio between the nose "
+            "tip's distance to each eye in the detected landmarks -- 1.0 is perfectly "
+            "frontal, higher values are more turned. Raise this to allow more extreme "
+            "angles through; lower it to be stricter."
+        ),
+    )
     device: str | None = Field(
         default=None,
         title="Device",

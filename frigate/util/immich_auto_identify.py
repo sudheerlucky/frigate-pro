@@ -102,9 +102,12 @@ def run_auto_identify_pass(
     if not person_cache:
         return {"checked": 0, "identified": 0, "people_available": 0}
 
+    max_profile_ratio = config.face_recognition.max_profile_ratio
+
     train_dir = os.path.join(FACE_DIR, "train")
     checked = 0
     identified = 0
+    skipped_non_frontal = 0
     matches: list[dict] = []
 
     for filename in os.listdir(train_dir):
@@ -115,6 +118,16 @@ def run_auto_identify_pass(
         path = os.path.join(train_dir, filename)
         img = cv2.imread(path)
         if img is None:
+            continue
+
+        # Reject side-profile crops before matching, not just at a
+        # confidence-score level: a profile face can still score a high
+        # raw similarity against the wrong person's frontal reference
+        # photos, because the embedding itself is unreliable from that
+        # angle in the first place, not because the match was close.
+        yaw_ratio = recognizer.estimate_face_yaw_ratio(img)
+        if yaw_ratio is not None and yaw_ratio > max_profile_ratio:
+            skipped_non_frontal += 1
             continue
 
         aligned = recognizer.align_face(img, img.shape[1], img.shape[0])
@@ -147,6 +160,7 @@ def run_auto_identify_pass(
     return {
         "checked": checked,
         "identified": identified,
+        "skipped_non_frontal": skipped_non_frontal,
         "people_available": len(person_cache),
         "matches": matches,
     }

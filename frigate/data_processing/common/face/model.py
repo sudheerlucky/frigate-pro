@@ -46,6 +46,48 @@ class FaceRecognizer(ABC):
             landmark_detector.loadModel(landmark_model)
             self.landmark_detector = landmark_detector
 
+    def estimate_face_yaw_ratio(self, image: np.ndarray) -> float | None:
+        """Rough frontality estimate from the same 68-point landmark model
+        align_face uses, without doing the full alignment: ratio of the
+        nose tip's horizontal distance to each eye's center. ~1.0 for a
+        face looking straight at the camera; a strongly asymmetric ratio
+        means one eye is much closer to the nose than the other in the
+        2D projection -- a full side-profile view, which face embedding
+        models trained on frontal-ish faces don't reliably identify
+        people from even at a high raw similarity score. Returns None if
+        landmarks can't be computed at all (e.g. no landmark detector
+        loaded, or the crop is unusable for a different reason)."""
+        if not self.landmark_detector:
+            return None
+
+        land_image = (
+            cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+        )
+
+        try:
+            ok, lands = self.landmark_detector.fit(
+                land_image,
+                np.array([(0, 0, land_image.shape[1], land_image.shape[0])]),
+            )
+        except cv2.error:
+            return None
+
+        if not ok:
+            return None
+
+        landmarks: np.ndarray = lands[0][0]
+        left_eye_center = landmarks[42:48].mean(axis=0)
+        right_eye_center = landmarks[36:42].mean(axis=0)
+        nose_tip = landmarks[30]
+
+        dist_to_left = abs(float(nose_tip[0] - left_eye_center[0]))
+        dist_to_right = abs(float(nose_tip[0] - right_eye_center[0]))
+
+        if dist_to_left < 1.0 or dist_to_right < 1.0:
+            return 999.0  # degenerate geometry, treat as non-frontal
+
+        return max(dist_to_left, dist_to_right) / min(dist_to_left, dist_to_right)
+
     def align_face(
         self,
         image: np.ndarray,
