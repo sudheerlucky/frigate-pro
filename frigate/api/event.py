@@ -1071,6 +1071,40 @@ async def event_likely_journey(
 
 
 @router.get(
+    "/journeys",
+    dependencies=[Depends(allow_any_authenticated())],
+    summary="List recent cross-camera journey sessions, deduplicated",
+    description="""Groups the most recent person events into journey sessions instead of
+    listing every raw event: an event that a chain-walk from an earlier event already
+    reaches is folded into that earlier session rather than also appearing as its own
+    top-level entry. Each session's shape matches /likely_journey's response, plus the
+    session's own start/end time and camera.""",
+)
+async def journeys(request: Request, limit: int = 50):
+    context: EmbeddingsContext = request.app.embeddings
+
+    if context is None:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Could not process request. Try restarting Frigate.",
+            },
+            status_code=500,
+        )
+
+    from frigate.util.person_journey import find_recent_journey_sessions
+
+    sessions = find_recent_journey_sessions(
+        request.app.frigate_config, context, limit=limit
+    )
+
+    return JSONResponse(
+        content={"success": True, "sessions": sessions},
+        status_code=200,
+    )
+
+
+@router.get(
     "/events/{event_id}/journey/merged_clip.mp4",
     dependencies=[Depends(allow_any_authenticated())],
     summary="Download a single merged clip of a confirmed Journey chain",

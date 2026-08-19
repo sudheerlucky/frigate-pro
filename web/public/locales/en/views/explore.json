@@ -283,6 +283,7 @@
     "desc": "Recent person activity across all cameras. Tap any detection to see its likely cross-camera journey.",
     "loading": "Loading recent activity...",
     "empty": "No recent person activity found.",
-    "unknownPerson": "Unknown person"
+    "unknownPerson": "Unknown person",
+    "crossedCameras": "Crossed {{count}} cameras"
   }
 }

@@ -217,3 +217,74 @@ def find_likely_journey_matches(
         current = next_event
 
     return chain
+
+
+DEFAULT_SESSION_LIMIT = 50
+
+
+def find_recent_journey_sessions(
+    config: FrigateConfig,
+    context: EmbeddingsContext,
+    limit: int = DEFAULT_SESSION_LIMIT,
+    hop_window_seconds: int = DEFAULT_HOP_WINDOW_SECONDS,
+    max_hops: int = DEFAULT_MAX_HOPS,
+    max_total_span_seconds: int = DEFAULT_MAX_TOTAL_SPAN_SECONDS,
+) -> list[dict]:
+    """One entry per continuous cross-camera walk among the most recent
+    `limit` person events, instead of one entry per raw event. Without
+    this, a single walk that hops cameras 3 times shows up as 3 separate
+    rows in a feed -- indistinguishable from 3 separate real visits.
+
+    Walks events oldest-first: whichever event starts a chain "consumes"
+    every event that chain reaches, so those consumed events are skipped
+    rather than also becoming session heads of their own. An event that
+    genuinely doesn't chain onward from anything earlier (including one
+    where the chain-walk stopped due to ambiguity -- see
+    _best_appearance_match) correctly becomes its own session instead of
+    being silently folded into someone else's.
+
+    Returns sessions newest-first, each shaped like a single
+    find_likely_journey_matches call's result plus the head event's own
+    identity: {event_id, camera, start_time, end_time, matches}."""
+    # Take the most recent `limit` events (descending), then walk them
+    # oldest-first so a chain always processes before the events it
+    # consumes -- selecting ascending+limit here would instead grab the
+    # OLDEST events in the entire history, not the most recent ones.
+    recent_events = list(
+        Event.select()
+        .where(Event.label == "person")
+        .order_by(Event.start_time.desc())
+        .limit(limit)
+    )
+    events = list(reversed(recent_events))
+
+    consumed_ids: set[str] = set()
+    sessions: list[dict] = []
+
+    for event in events:
+        if event.id in consumed_ids:
+            continue
+
+        chain = find_likely_journey_matches(
+            config,
+            context,
+            event.id,
+            hop_window_seconds=hop_window_seconds,
+            max_hops=max_hops,
+            max_total_span_seconds=max_total_span_seconds,
+        )
+        consumed_ids.update(match["event_id"] for match in chain)
+
+        sessions.append(
+            {
+                "event_id": event.id,
+                "camera": event.camera,
+                "start_time": event.start_time,
+                "end_time": event.end_time,
+                "sub_label": event.sub_label,
+                "matches": chain,
+            }
+        )
+
+    sessions.sort(key=lambda s: s["start_time"], reverse=True)
+    return sessions

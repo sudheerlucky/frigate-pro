@@ -1,25 +1,41 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import axios from "axios";
 import useSWR from "swr";
 import { useTranslation } from "react-i18next";
 import { baseUrl } from "@/api/baseUrl";
 import { formatUnixTimestampToDateTime } from "@/utils/dateUtil";
-import { Event } from "@/types/event";
 import JourneyView from "@/components/overlay/JourneyView";
+
+type JourneySessionMatch = {
+  event_id: string;
+  camera: string;
+};
+
+type JourneySession = {
+  event_id: string;
+  camera: string;
+  start_time: number;
+  end_time: number | null;
+  sub_label: string | null;
+  matches: JourneySessionMatch[];
+};
+
+type JourneysResponse = {
+  success: boolean;
+  sessions: JourneySession[];
+};
 
 export default function Journeys() {
   const { t } = useTranslation(["views/explore"]);
 
-  const { data: events, isLoading } = useSWR<Event[]>([
-    "events",
-    { labels: "person", limit: 100 },
-  ]);
-
-  const feed = useMemo(
-    () => (events ?? []).slice().sort((a, b) => b.start_time - a.start_time),
-    [events],
+  const { data, isLoading } = useSWR<JourneysResponse>(
+    "journeys",
+    (url: string) => axios.get<JourneysResponse>(url).then((r) => r.data),
   );
 
-  const [selected, setSelected] = useState<Event | null>(null);
+  const sessions = data?.sessions ?? [];
+
+  const [selected, setSelected] = useState<JourneySession | null>(null);
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,48 +55,58 @@ export default function Journeys() {
         </div>
       )}
 
-      {!isLoading && feed.length === 0 && (
+      {!isLoading && sessions.length === 0 && (
         <div className="text-sm text-secondary-foreground">
           {t("journeysPage.empty")}
         </div>
       )}
 
       <div className="flex flex-col gap-2">
-        {feed.map((event) => (
-          <button
-            key={event.id}
-            className="flex items-center gap-3 rounded-lg bg-secondary p-2 text-left transition-colors hover:bg-muted"
-            onClick={() => {
-              setSelected(event);
-              setOpen(true);
-            }}
-          >
-            <img
-              className="h-14 w-14 shrink-0 rounded-md object-cover"
-              src={`${baseUrl}api/events/${event.id}/thumbnail.webp`}
-              alt={event.camera}
-            />
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <div className="truncate text-sm font-medium text-primary">
-                {event.sub_label && event.sub_label !== "unknown"
-                  ? event.sub_label
-                  : t("journeysPage.unknownPerson")}
+        {sessions.map((session) => {
+          const cameraCount =
+            1 + new Set(session.matches.map((m) => m.camera)).size;
+
+          return (
+            <button
+              key={session.event_id}
+              className="flex items-center gap-3 rounded-lg bg-secondary p-2 text-left transition-colors hover:bg-muted"
+              onClick={() => {
+                setSelected(session);
+                setOpen(true);
+              }}
+            >
+              <img
+                className="h-14 w-14 shrink-0 rounded-md object-cover"
+                src={`${baseUrl}api/events/${session.event_id}/thumbnail.webp`}
+                alt={session.camera}
+              />
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="truncate text-sm font-medium text-primary">
+                  {session.sub_label && session.sub_label !== "unknown"
+                    ? session.sub_label
+                    : t("journeysPage.unknownPerson")}
+                </div>
+                <div className="truncate text-xs text-secondary-foreground">
+                  {session.camera}
+                  {" · "}
+                  {formatUnixTimestampToDateTime(session.start_time, {
+                    time_style: "medium",
+                    date_style: "medium",
+                  })}
+                </div>
+                {session.matches.length > 0 && (
+                  <div className="truncate text-xs text-secondary-foreground">
+                    {t("journeysPage.crossedCameras", { count: cameraCount })}
+                  </div>
+                )}
               </div>
-              <div className="truncate text-xs text-secondary-foreground">
-                {event.camera}
-                {" · "}
-                {formatUnixTimestampToDateTime(event.start_time, {
-                  time_style: "medium",
-                  date_style: "medium",
-                })}
-              </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       <JourneyView
-        eventId={open ? (selected?.id ?? null) : null}
+        eventId={open ? (selected?.event_id ?? null) : null}
         sourceCamera={selected?.camera}
         open={open}
         setOpen={setOpen}
