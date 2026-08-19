@@ -1022,7 +1022,7 @@ async def event(event_id: str, request: Request):
     reported with a confidence score, never as confirmed identity.""",
 )
 async def event_likely_journey(
-    event_id: str, request: Request, window_seconds: int = 30
+    event_id: str, request: Request, window_seconds: int = 90
 ):
     try:
         event = Event.get(Event.id == event_id)
@@ -1048,7 +1048,12 @@ async def event_likely_journey(
     )
 
     return JSONResponse(
-        content={"success": True, "event_id": event_id, "matches": matches},
+        content={
+            "success": True,
+            "event_id": event_id,
+            "start_time": event.start_time,
+            "matches": matches,
+        },
         status_code=200,
     )
 
