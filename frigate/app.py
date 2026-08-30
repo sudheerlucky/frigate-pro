@@ -459,6 +459,15 @@ class FrigateApp:
         )
         self.immich_auto_identify_maintainer.start()
 
+
+    def start_journey_clip_maintainer(self) -> None:
+        from frigate.util.journey_automerge import JourneyClipMaintainer
+
+        self.journey_clip_maintainer = JourneyClipMaintainer(
+            self.config, self.embeddings, self.stop_event
+        )
+        self.journey_clip_maintainer.start()
+
     def start_stats_emitter(self) -> None:
         self.stats_emitter = StatsEmitter(
             self.config,
@@ -612,6 +621,7 @@ class FrigateApp:
         self.start_audio_processor()
         self.start_storage_maintainer()
         self.start_immich_auto_identify_maintainer()
+        self.start_journey_clip_maintainer()
         self.start_stats_emitter()
         self.start_timeline_processor()
         self.start_event_processor()

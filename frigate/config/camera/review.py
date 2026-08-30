@@ -37,6 +37,41 @@ class AlertsConfig(FrigateBaseModel):
         description="Zones that an object must enter to be considered an alert; leave empty to allow any zone.",
     )
 
+    suppress_parked_vehicles: bool = Field(
+        default=True,
+        title="Suppress alerts for parked vehicles",
+        description=(
+            "Stop raising alerts for a vehicle once it has sat still long enough to "
+            "be parked rather than arriving. A car or bike parked in a driveway is "
+            "in view continuously, so without this it re-alerts every time tracking "
+            "reacquires it -- which trains you to ignore vehicle alerts entirely, "
+            "including the one that matters. The vehicle is still recorded and still "
+            "appears under detections; it just stops being treated as something that "
+            "needs your attention. Its arrival and departure both still alert, "
+            "because it is moving then."
+        ),
+    )
+    parked_vehicle_labels: list[str] = Field(
+        default=["car", "motorcycle", "bicycle", "truck", "bus"],
+        title="Labels treated as parkable vehicles",
+        description=(
+            "Which labels the parked-vehicle suppression applies to. People are "
+            "deliberately excluded: a person who stops moving is usually more "
+            "interesting, not less."
+        ),
+    )
+    parked_vehicle_frames: int = Field(
+        default=300,
+        ge=1,
+        title="Frames of stillness before a vehicle counts as parked",
+        description=(
+            "How many consecutive motionless frames before a vehicle is treated as "
+            "parked. At 5 fps the 300 default is about a minute -- long enough that "
+            "a car waiting at a gate still alerts, short enough that a genuinely "
+            "parked car stops nagging."
+        ),
+    )
+
     enabled_in_config: bool | None = Field(
         default=None,
         title="Original alerts state",

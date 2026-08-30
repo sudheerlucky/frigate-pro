@@ -83,9 +83,37 @@ class TrackedObject:
         self.current_activity: str | None = None
         self.previous = self.to_dict()
 
+    def is_parked_vehicle(self) -> bool:
+        """A vehicle that has been motionless long enough to be parked rather
+        than arriving or waiting.
+
+        Uses a dedicated, much larger frame count than detect.stationary.threshold
+        (which flips within a couple of seconds and only governs how often the
+        detector re-checks the object). Parking is a statement about intent, not
+        a tracking optimisation, so it needs its own far longer window."""
+        alerts_config = self.camera_config.review.alerts
+
+        if not getattr(alerts_config, "suppress_parked_vehicles", False):
+            return False
+
+        if self.obj_data["label"] not in getattr(
+            alerts_config, "parked_vehicle_labels", []
+        ):
+            return False
+
+        motionless = cast(int | float, self.obj_data.get("motionless_count", 0))
+        return motionless >= getattr(alerts_config, "parked_vehicle_frames", 300)
+
     @property
     def max_severity(self) -> str | None:
         review_config = self.camera_config.review
+
+        # A parked vehicle drops to detection severity: still recorded and
+        # still listed, just not raised as something needing attention.
+        if self.is_parked_vehicle():
+            if review_config.detections.enabled:
+                return SeverityEnum.detection
+            return None
 
         if (
             self.camera_config.review.alerts.enabled

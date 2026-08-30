@@ -52,6 +52,27 @@ def _build_person_embedding_cache(
     resp = _get(immich_config, "/api/people", params={"withHidden": "false"})
     people = resp.json()["people"]
 
+    # Restrict candidates to people who actually live here. Without this the
+    # pass will happily match a blurry CCTV crop to any relative or visitor
+    # who happens to be in the photo library -- which is how a non-resident
+    # ended up auto-registered repeatedly.
+    allowed = {n.strip().lower() for n in immich_config.auto_identify_people}
+    if not allowed:
+        logger.warning(
+            "Immich auto-identify: no auto_identify_people configured, "
+            "refusing to match against the whole library"
+        )
+        return {}
+
+    skipped_names = [
+        p["name"] for p in people if p.get("name", "").strip().lower() not in allowed
+    ]
+    people = [p for p in people if p.get("name", "").strip().lower() in allowed]
+    if skipped_names:
+        logger.debug(
+            f"Immich auto-identify: ignoring {len(skipped_names)} non-resident people"
+        )
+
     cache: dict[str, list[np.ndarray]] = {}
     for person in people:
         candidates = fetch_candidate_faces(immich_config, person["id"])
@@ -108,6 +129,7 @@ def run_auto_identify_pass(
     checked = 0
     identified = 0
     skipped_non_frontal = 0
+    skipped_ambiguous = 0
     matches: list[dict] = []
 
     for filename in os.listdir(train_dir):
@@ -133,13 +155,25 @@ def run_auto_identify_pass(
         aligned = recognizer.align_face(img, img.shape[1], img.shape[0])
         embedding = recognizer.face_embedder([aligned])[0].squeeze()
 
-        best_name, best_score = None, 0.0
+        scored: list[tuple[str, float]] = []
         for name, refs in person_cache.items():
             cosine_similarity = best_match_confidence(embedding, refs)
-            confidence = similarity_to_confidence(cosine_similarity)
-            if confidence > best_score:
-                best_score = confidence
-                best_name = name
+            scored.append((name, similarity_to_confidence(cosine_similarity)))
+
+        scored.sort(key=lambda pair: pair[1], reverse=True)
+        best_name, best_score = (scored[0] if scored else (None, 0.0))
+
+        # Two people scoring nearly the same means the crop doesn't actually
+        # distinguish them -- assigning the marginally higher one is a coin
+        # flip presented as a confident identification.
+        if len(scored) > 1 and (scored[0][1] - scored[1][1]) < immich_config.auto_identify_margin:
+            skipped_ambiguous += 1
+            logger.debug(
+                f"Immich auto-identify: {filename} ambiguous between "
+                f"{scored[0][0]} ({scored[0][1]:.3f}) and "
+                f"{scored[1][0]} ({scored[1][1]:.3f}), skipping"
+            )
+            continue
 
         if best_name and best_score >= immich_config.auto_identify_threshold:
             with open(path, "rb") as f:
@@ -161,6 +195,7 @@ def run_auto_identify_pass(
         "checked": checked,
         "identified": identified,
         "skipped_non_frontal": skipped_non_frontal,
+        "skipped_ambiguous": skipped_ambiguous,
         "people_available": len(person_cache),
         "matches": matches,
     }

@@ -233,6 +233,71 @@ def selfcheck(request: Request):
     return JSONResponse(content={"healthy": healthy, "checks": checks})
 
 
+@router.post(
+    "/autotrain/harvest",
+    dependencies=[Depends(require_role(["admin"]))],
+    summary="Harvest hard examples from recent events and export a YOLO dataset",
+    description="""Mines recent events for frames the current detector found hard -- where the
+    tracker stayed confident but the per-frame score dipped -- auto-labels them, and writes a
+    YOLO-format dataset with a frozen holdout split under clips/autotrain/dataset.
+
+    This container ships inference only (onnxruntime, no torch), so the fine-tune itself runs
+    elsewhere against the exported dataset. Evaluation and promotion stay here, because the
+    validation gate is the part that must not be skipped: training on labels derived from the
+    current model's own behaviour will otherwise reinforce its existing blind spots.""",
+)
+def autotrain_harvest(request: Request, limit: int = 500):
+    from frigate.util.autotrain import run_harvest_and_export
+
+    try:
+        summary = run_harvest_and_export(request.app.frigate_config, limit=limit)
+    except Exception as e:
+        logger.exception("Autotrain harvest failed")
+        return JSONResponse(
+            content={"success": False, "message": str(e)}, status_code=500
+        )
+
+    return JSONResponse(content={"success": True, **summary})
+
+
+@router.get(
+    "/autotrain/status",
+    dependencies=[Depends(require_role(["admin"]))],
+    summary="Report the state of the local auto-training dataset",
+)
+def autotrain_status(request: Request):
+    import json as _json
+    import os
+
+    from frigate.util.autotrain import AUTOTRAIN_DIR, DATASET_DIR
+
+    manifest_path = os.path.join(AUTOTRAIN_DIR, "manifest.json")
+    manifest = None
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path) as f:
+                manifest = _json.load(f)
+        except Exception:
+            manifest = None
+
+    def _count(split: str) -> int:
+        d = os.path.join(DATASET_DIR, split, "images")
+        try:
+            return len(os.listdir(d))
+        except OSError:
+            return 0
+
+    return JSONResponse(
+        content={
+            "success": True,
+            "dataset_dir": DATASET_DIR,
+            "train_images": _count("train"),
+            "holdout_images": _count("val"),
+            "last_harvest": manifest,
+        }
+    )
+
+
 @router.get("/metrics", dependencies=[Depends(allow_any_authenticated())])
 def metrics(request: Request):
     """Expose Prometheus metrics endpoint and update metrics with latest stats"""

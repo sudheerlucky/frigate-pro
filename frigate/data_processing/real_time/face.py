@@ -293,6 +293,36 @@ class FaceRealTimeProcessor(RealTimeProcessorApi):
             logger.debug(f"Empty face crop for {id}")
             return
 
+        # Quality gates, applied before recognition rather than after.
+        # A blurred or side-on crop does not yield a low-confidence result
+        # that a threshold can filter out later -- it yields a *confident*
+        # match to whoever the crop happens to resemble. The only safe place
+        # to reject it is before it reaches the classifier at all.
+        face_config = self.config.cameras[camera].face_recognition
+
+        min_sharpness = getattr(face_config, "min_sharpness", 0.0)
+        if min_sharpness > 0:
+            gray = cv2.cvtColor(face_frame, cv2.COLOR_BGR2GRAY)
+            sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if sharpness < min_sharpness:
+                logger.debug(
+                    f"Skipping face for {id}: too blurry "
+                    f"(sharpness {sharpness:.1f} < {min_sharpness})"
+                )
+                self.__update_metrics(datetime.datetime.now().timestamp() - start)
+                return
+
+        max_profile_ratio = getattr(face_config, "max_profile_ratio", None)
+        if max_profile_ratio:
+            yaw_ratio = self.recognizer.estimate_face_yaw_ratio(face_frame)
+            if yaw_ratio is not None and yaw_ratio > max_profile_ratio:
+                logger.debug(
+                    f"Skipping face for {id}: too side-on "
+                    f"(yaw ratio {yaw_ratio:.2f} > {max_profile_ratio})"
+                )
+                self.__update_metrics(datetime.datetime.now().timestamp() - start)
+                return
+
         res = self.recognizer.classify(face_frame)
 
         if not res:
@@ -342,10 +372,35 @@ class FaceRealTimeProcessor(RealTimeProcessorApi):
             ),
         )
 
-        if weighted_score >= self.face_config.recognition_threshold:
+        # Require independent agreement across several quality-passing
+        # frames before committing a name. Frigate stops examining faces for
+        # an object once it has a sub label, so a name written from a single
+        # frame is effectively final -- there is no later frame that can
+        # correct it. Waiting for corroboration costs only recognition
+        # latency, which does not matter for reviewing footage after the
+        # fact.
+        agreeing = sum(
+            1
+            for name, _score, _area in self.person_face_history[id]
+            if name == weighted_sub_label and name != "unknown"
+        )
+        min_agreeing = getattr(
+            self.config.cameras[camera].face_recognition, "min_agreeing_faces", 1
+        )
+
+        if (
+            weighted_score >= self.face_config.recognition_threshold
+            and weighted_sub_label != "unknown"
+            and agreeing >= min_agreeing
+        ):
             self.sub_label_publisher.publish(
                 (id, weighted_sub_label, weighted_score),
                 EventMetadataTypeEnum.sub_label.value,
+            )
+        elif weighted_score >= self.face_config.recognition_threshold:
+            logger.debug(
+                f"Holding face result for {id}: '{weighted_sub_label}' has "
+                f"{agreeing}/{min_agreeing} agreeing frames so far"
             )
 
         self.__update_metrics(datetime.datetime.now().timestamp() - start)

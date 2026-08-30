@@ -17,7 +17,7 @@ type JourneyMatch = {
   event_id: string;
   camera: string;
   confidence: number;
-  method: "face" | "appearance";
+  method: "appearance";
   start_time: number;
   end_time: number | null;
   hop: number;
@@ -162,9 +162,20 @@ export default function JourneyView({
                   })}
                 </div>
                 <img
-                  className="h-20 w-20 rounded-md object-cover"
-                  src={`${baseUrl}api/events/${item.eventId}/thumbnail.webp`}
+                  className="h-32 w-32 rounded-md object-cover sm:h-40 sm:w-40"
+                  src={`${baseUrl}api/events/${item.eventId}/snapshot.jpg?crop=1&quality=95`}
                   alt={item.camera ?? ""}
+                  loading="lazy"
+                  onError={(e) => {
+                    // in-progress events and cameras with snapshots
+                    // disabled have no snapshot -- fall back to the
+                    // low-res thumbnail rather than showing a broken image
+                    const img = e.currentTarget;
+                    const fallback = `${baseUrl}api/events/${item.eventId}/thumbnail.webp`;
+                    if (img.src !== fallback) {
+                      img.src = fallback;
+                    }
+                  }}
                 />
                 <div className="max-w-20 truncate text-xs text-primary">
                   {item.camera}
@@ -172,13 +183,11 @@ export default function JourneyView({
                 <div className="text-xs text-secondary-foreground">
                   {item.isSource
                     ? t("journey.source")
-                    : item.match?.method === "face"
-                      ? t("journey.confirmed")
-                      : t("journey.likelyMatch", {
-                          confidence: Math.round(
-                            (item.match?.confidence ?? 0) * 100,
-                          ),
-                        })}
+                    : t("journey.likelyMatch", {
+                        confidence: Math.round(
+                          (item.match?.confidence ?? 0) * 100,
+                        ),
+                      })}
                 </div>
                 {item.activity && (
                   <div className="rounded bg-secondary px-1.5 py-0.5 text-[10px] capitalize text-secondary-foreground">

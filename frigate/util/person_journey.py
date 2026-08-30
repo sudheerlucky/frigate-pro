@@ -8,23 +8,38 @@ composes into a journey of any total length, which a single window sized
 for the whole trip cannot do without also risking false positives on a
 short trip.
 
-Primary signal per hop is face recognition: if the current event already
-carries a confident sub_label (a recognized name, not "unknown"), the
-closest-in-time other-camera event with the same sub_label is a confirmed
-match -- this is just the identity Frigate's face pipeline already
-assigned, not a new inference.
+Matching is whole-person appearance only -- face recognition is
+deliberately NOT used here, not even as a hint. On this deployment faces
+are usually too small, too turned, or too motion-blurred at the distances
+these cameras cover to be trustworthy, and a wrong face match is worse
+than no match: it silently welds two different people's timelines
+together with false confidence. Person re-identification looks at build,
+clothing, hair and gait cues across the whole body, which survives the
+angles and distances that defeat face recognition.
 
-Fallback per hop, when face isn't available or didn't produce a name, is a
-dedicated person re-identification model (OSNet, MSMT17 fine-tuned --
-frigate/embeddings/onnx/person_reid.py) run against each candidate's
-cropped thumbnail. This is a real re-ID model, more precise than a
-general-purpose visual-similarity embedding, but still fundamentally
-probabilistic -- no re-ID system reaches 100% accuracy, so matches are
-always reported as "likely same person" with a confidence score, never as
-confirmed identity. Each hop's confidence is relative to its own immediate
-predecessor, not the original source event -- chained hops compound
-uncertainty, so a blended single score across the whole chain would
-overstate how sure hop 4 really is.
+The model is a dedicated person re-identification network (OSNet,
+MSMT17 fine-tuned -- frigate/embeddings/onnx/person_reid.py). It is a
+real re-ID model rather than a general-purpose visual-similarity
+embedding, but still fundamentally probabilistic -- no re-ID system
+reaches 100% accuracy, so matches are always reported as "likely same
+person" with a confidence score, never as confirmed identity. Each hop's
+confidence is relative to its own immediate predecessor, not the original
+source event -- chained hops compound uncertainty, so a blended single
+score across the whole chain would overstate how sure hop 4 really is.
+
+Crop quality matters more than anything else for re-ID accuracy, so the
+embedder is fed the event's clean snapshot cropped to the person's box at
+native resolution (typically 300-700px on a side here) rather than the
+175x175 thumbnail Frigate stores for UI use. Feeding a 175px thumbnail to
+a re-ID model throws away most of the detail the model is looking at
+before it ever sees the image. The thumbnail remains a fallback for
+events with no snapshot.
+
+Embeddings are cached per event id for the life of a call tree, because
+the feed-level walk (find_recent_journey_sessions) re-examines the same
+candidate events many times over -- without the cache that endpoint spent
+most of its time re-embedding images it had already embedded, to the
+point of timing out on larger windows.
 
 Walks forward in time only. Clicking the first event of a trip sees the
 whole thing; clicking a middle event only sees what comes after it, not
@@ -52,7 +67,7 @@ from frigate.config import FrigateConfig
 from frigate.embeddings import EmbeddingsContext
 from frigate.embeddings.onnx.person_reid import PersonReidEmbedding, cosine_similarity
 from frigate.models import Event
-from frigate.util.file import get_event_thumbnail_bytes
+from frigate.util.file import get_event_snapshot_bytes, get_event_thumbnail_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -75,19 +90,45 @@ def _get_reid_embedder() -> PersonReidEmbedding:
     return _reid_embedder
 
 
-def _best_face_match(current: Event, candidates: list[Event]) -> Event | None:
-    """Closest-in-time same-name candidate, or None if `current` has no
-    confident name or no candidate shares it."""
-    if not current.sub_label or current.sub_label == "unknown":
-        return None
+def _get_person_crop_bytes(event: Event) -> bytes | None:
+    """Best available image of just this person, for the re-ID model.
 
-    named = [c for c in candidates if c.sub_label == current.sub_label]
-    if not named:
-        return None
+    Prefers the clean snapshot cropped to the person's own box at its
+    native resolution -- several times the linear resolution of the stored
+    thumbnail, which is a 175x175 UI asset. Re-ID accuracy tracks crop
+    detail closely, so this is the single highest-leverage input to the
+    whole match. Falls back to the thumbnail when no snapshot exists (an
+    in-progress event, or snapshots disabled for that camera), so a
+    missing snapshot degrades match quality instead of dropping the hop."""
+    try:
+        snapshot_bytes, _ = get_event_snapshot_bytes(
+            event, ext="jpg", crop=True, quality=95
+        )
+        if snapshot_bytes:
+            return snapshot_bytes
+    except Exception as e:
+        logger.debug(f"Journey: snapshot crop unavailable for {event.id}: {e}")
 
-    current_end_time = current.end_time if current.end_time is not None else time.time()
-    named.sort(key=lambda c: abs(c.start_time - current_end_time))
-    return named[0]
+    return get_event_thumbnail_bytes(event)
+
+
+def _embed_event(event: Event, cache: dict[str, "np.ndarray | None"]):
+    """Embed an event's person crop, memoized per event id.
+
+    find_recent_journey_sessions walks many overlapping chains, so the same
+    candidate event is examined repeatedly within one request; embedding is
+    by far the most expensive step, and re-running it per visit is what made
+    that endpoint time out on larger windows."""
+    if event.id in cache:
+        return cache[event.id]
+
+    embedding = None
+    crop_bytes = _get_person_crop_bytes(event)
+    if crop_bytes is not None:
+        embedding = _get_reid_embedder().embed(crop_bytes)
+
+    cache[event.id] = embedding
+    return embedding
 
 
 def _best_appearance_match(
@@ -95,6 +136,7 @@ def _best_appearance_match(
     candidates: list[Event],
     min_confidence: float,
     ambiguity_margin: float,
+    cache: dict,
 ) -> tuple[Event, float] | None:
     """Highest-similarity candidate above the confidence floor -- but only if
     it's clearly the best one. If a second candidate scores within
@@ -102,22 +144,13 @@ def _best_appearance_match(
     two plausible people (e.g. a second person who happened to also be on
     the target camera around the same time): refuse to guess and return
     None rather than silently picking the higher of two close scores."""
-    current_bytes = get_event_thumbnail_bytes(current)
-    if current_bytes is None:
-        return None
-
-    embedder = _get_reid_embedder()
-    current_embedding = embedder.embed(current_bytes)
+    current_embedding = _embed_event(current, cache)
     if current_embedding is None:
         return None
 
     scored: list[tuple[Event, float]] = []
     for candidate in candidates:
-        candidate_bytes = get_event_thumbnail_bytes(candidate)
-        if candidate_bytes is None:
-            continue
-
-        candidate_embedding = embedder.embed(candidate_bytes)
+        candidate_embedding = _embed_event(candidate, cache)
         if candidate_embedding is None:
             continue
 
@@ -155,6 +188,7 @@ def find_likely_journey_matches(
     min_appearance_confidence: float | None = None,
     ambiguity_margin: float | None = None,
     same_camera_gap_seconds: int = DEFAULT_SAME_CAMERA_GAP_SECONDS,
+    embedding_cache: dict | None = None,
 ) -> list[dict]:
     """Chain-walk forward from `event_id` across cameras, one hop at a time.
     Returns the chain in chronological order as a list of
@@ -174,6 +208,8 @@ def find_likely_journey_matches(
         min_appearance_confidence = config.journey.min_appearance_confidence
     if ambiguity_margin is None:
         ambiguity_margin = config.journey.ambiguity_margin
+    if embedding_cache is None:
+        embedding_cache = {}
 
     source = Event.get_or_none(Event.id == event_id)
 
@@ -259,24 +295,21 @@ def find_likely_journey_matches(
         if not candidates:
             break
 
-        next_event: Event | None = None
-        confidence: float
-        method: str
+        appearance_match = _best_appearance_match(
+            current,
+            candidates,
+            min_appearance_confidence,
+            ambiguity_margin,
+            embedding_cache,
+        )
+        if appearance_match is None:
+            break
 
-        face_match = _best_face_match(current, candidates)
-        if face_match is not None:
-            next_event, confidence, method = face_match, 0.99, "face"
-        else:
-            appearance_match = _best_appearance_match(
-                current, candidates, min_appearance_confidence, ambiguity_margin
-            )
-            if appearance_match is None:
-                break
-            next_event, confidence, method = (
-                appearance_match[0],
-                appearance_match[1],
-                "appearance",
-            )
+        next_event, confidence, method = (
+            appearance_match[0],
+            appearance_match[1],
+            "appearance",
+        )
 
         chain.append(
             {
@@ -342,6 +375,11 @@ def find_recent_journey_sessions(
     )
     events = list(reversed(recent_events))
 
+    # One cache for the whole feed walk: consecutive sessions examine
+    # heavily overlapping candidate sets, so this is where the memoization
+    # pays for itself most.
+    embedding_cache: dict = {}
+
     consumed_ids: set[str] = set()
     sessions: list[dict] = []
 
@@ -357,6 +395,7 @@ def find_recent_journey_sessions(
             max_hops=max_hops,
             max_total_span_seconds=max_total_span_seconds,
             same_camera_gap_seconds=same_camera_gap_seconds,
+            embedding_cache=embedding_cache,
         )
         consumed_ids.update(match["event_id"] for match in chain)
 

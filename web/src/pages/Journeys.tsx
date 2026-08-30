@@ -77,9 +77,17 @@ export default function Journeys() {
               }}
             >
               <img
-                className="h-14 w-14 shrink-0 rounded-md object-cover"
-                src={`${baseUrl}api/events/${session.event_id}/thumbnail.webp`}
+                className="size-20 shrink-0 rounded-md object-cover"
+                src={`${baseUrl}api/events/${session.event_id}/snapshot.jpg?crop=1&quality=95`}
                 alt={session.camera}
+                loading="lazy"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  const fallback = `${baseUrl}api/events/${session.event_id}/thumbnail.webp`;
+                  if (img.src !== fallback) {
+                    img.src = fallback;
+                  }
+                }}
               />
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="truncate text-sm font-medium text-primary">

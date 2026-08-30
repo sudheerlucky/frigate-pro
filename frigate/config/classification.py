@@ -309,6 +309,32 @@ class ImmichConfig(FrigateBaseModel):
         title="Auto-identify confidence threshold",
         description="Minimum match confidence required to auto-register an unknown face under an Immich person's name.",
     )
+    auto_identify_people: list[str] = Field(
+        default_factory=list,
+        title="People eligible for auto-identify",
+        description=(
+            "Names of Immich people who actually live here / are expected on camera. "
+            "ONLY these people can be auto-registered. An Immich library contains "
+            "relatives, friends and one-off visitors who will never legitimately appear "
+            "on these cameras, and a low-quality CCTV face crop can score a high raw "
+            "similarity against any of them -- so leaving every Immich person eligible "
+            "means the pass eventually mislabels someone. Empty list disables "
+            "auto-identify matching entirely rather than falling back to 'everyone', "
+            "because 'everyone' is the unsafe default that caused exactly that."
+        ),
+    )
+    auto_identify_margin: float = Field(
+        default=0.04,
+        title="Auto-identify ambiguity margin",
+        description=(
+            "If the two best-scoring candidate people are within this margin of each "
+            "other, the crop is treated as ambiguous and left unidentified rather than "
+            "assigned to whichever happened to score marginally higher. Mirrors the "
+            "same guard used by cross-camera journey matching."
+        ),
+        ge=0.0,
+        le=1.0,
+    )
     auto_identify_interval_seconds: int = Field(
         default=900,
         ge=0,
@@ -373,6 +399,39 @@ class FaceRecognitionConfig(FrigateBaseModel):
         default=True,
         title="Blur confidence filter",
         description="Adjust confidence scores based on image blur to reduce false positives for poor quality faces.",
+    )
+    min_sharpness: float = Field(
+        default=80.0,
+        ge=0.0,
+        title="Minimum face crop sharpness",
+        description=(
+            "Rejects a face crop before recognition if it is too motion-blurred to "
+            "identify anyone from, measured as the variance of the Laplacian. A "
+            "blurred crop does not produce a low-confidence match -- it produces a "
+            "confident match to whoever the smear happens to resemble, which is far "
+            "more damaging than no match at all. Set to 0 to disable this gate.\n\n"
+            "The default was calibrated against a real deployment rather than "
+            "guessed: hand-curated known-good face images there measured a median "
+            "sharpness of roughly 1650-2125, while the queue of unrecognized crops "
+            "measured a median of 82 -- about a twentyfold gap. A threshold of 80 "
+            "discards roughly 46% of that unrecognized queue while keeping about "
+            "94% of the curated known-good images. Cameras at different distances "
+            "or resolutions will sit elsewhere on that scale, so re-measure before "
+            "assuming this number transfers."
+        ),
+    )
+    min_agreeing_faces: int = Field(
+        default=2,
+        ge=1,
+        title="Frames that must agree before assigning a name",
+        description=(
+            "How many separate quality-passing frames must independently land on the "
+            "same person before that name is written to the event. With 1, a single "
+            "lucky frame can permanently label a person, and Frigate then stops "
+            "examining further faces for that object -- so one bad frame is "
+            "unrecoverable. Raising this trades recognition latency, which does not "
+            "matter for after-the-fact review, for accuracy, which does."
+        ),
     )
     max_profile_ratio: float = Field(
         default=2.2,
@@ -575,6 +634,19 @@ class PersonJourneyConfig(FrigateBaseModel):
         ),
         ge=0.0,
         le=1.0,
+    )
+    auto_merge_interval_seconds: int = Field(
+        default=600,
+        ge=0,
+        title="Auto-merge interval (seconds)",
+        description=(
+            "How often to pre-build a single merged video for each walk that crossed "
+            "more than one camera, so a cross-camera alert is one clip to press play "
+            "on rather than several to stitch together mentally. Same-camera sessions "
+            "are skipped -- those are already one continuous recording. Set to 0 to "
+            "disable. Merged clips are a derived cache: they are capped in number and "
+            "safe to delete at any time."
+        ),
     )
     same_camera_gap_seconds: int = Field(
         default=1200,
